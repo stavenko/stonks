@@ -2,4 +2,9 @@
 
 members = [
   "./app",
+  "./stock-data-providers",
+  "./apps/mistletoe",
+  "./data-sources/binance",
+  "./data-sources/sources-common",
+  "./data-sources/market-feed",
 ]

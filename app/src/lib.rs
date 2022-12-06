@@ -1,45 +1,21 @@
 use core::fmt;
-use std::{marker::PhantomData, pin::Pin, sync::Arc};
 
-use async_trait::async_trait;
 pub use futures::{
     channel::mpsc, future::BoxFuture, stream::FuturesUnordered, FutureExt, SinkExt, StreamExt,
 };
+pub use futures::{Sink, Stream};
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
-use tracing::{error, info};
+use tracing::{error, info, debug};
 
 pub mod worker;
 
-pub struct Worker<S, T>
-where
-    S: Send + Sync,
-{
-    instance: Box<dyn worker::Worker<T> + Send>,
-    reducer: Box<dyn Fn(S) -> T + Send>,
-    inducer: Box<dyn Fn(S, T) -> S + Send>,
-}
-
-impl<S, T> Worker<S, T>
-where
-    S: Send + Sync,
-{
-    pub fn new(
-        instance: impl worker::Worker<T> + Send + 'static,
-        reducer: impl Fn(S) -> T + Send + 'static,
-        inducer: impl Fn(S, T) -> S + Send + 'static,
-    ) -> Self {
-        Worker {
-            instance: Box::new(instance),
-            reducer: Box::new(reducer),
-            inducer: Box::new(inducer),
-        }
-    }
-}
-
 pub trait Reduced<S> {
     fn reduce(state: S) -> Self;
-    fn induce(self, state: S) -> S;
+}
+
+pub trait InjectedTo<S> {
+    fn inject_to(self, state: S) -> S;
 }
 
 pub struct App<'f, S> {
@@ -68,10 +44,11 @@ where
             }
         }
         .boxed();
+
         AppBuilder {
             runners: Vec::new(),
             state_updater,
-            state_tx: state_tx,
+            state_tx,
             state_rx: wstate_rx,
         }
     }
@@ -83,7 +60,11 @@ where
             futures.push(runner(self.state.clone()));
         }
 
+        let total_len = futures.len();
+        info!(?total_len, "run futures");
+
         while futures.next().await.is_some() {}
+        info!("all futures returned");
     }
 }
 
@@ -91,52 +72,123 @@ impl<'f, AppState> AppBuilder<'f, AppState>
 where
     AppState: Clone + Send + Sync + 'static,
 {
-    pub fn add_worker<WorkerState>(
+    async fn state_reducer<WorkerState>(
+        mut state_stream: impl Stream<Item = AppState> + Unpin,
+        consumer: watch::Sender<Option<WorkerState>>,
+    ) where
+        WorkerState: Reduced<AppState> + Send + fmt::Debug,
+    {
+        while let Some(data) = state_stream.next().await {
+            let new_data = WorkerState::reduce(data);
+            consumer
+                .send(Some(new_data))
+                .expect("Cannot send data to channel");
+        }
+    }
+
+    async fn state_injector<WorkerState, SinkError>(
+        mut provider_stream: impl Stream<Item = WorkerState> + Unpin,
+        app_state_watch: watch::Receiver<AppState>,
+        mut app_state_sink: impl Sink<AppState, Error = SinkError> + Unpin,
+    ) where
+        WorkerState: InjectedTo<AppState> + fmt::Debug,
+        SinkError: fmt::Debug,
+    {
+        while let Some(data) = provider_stream.next().await {
+            debug!(?data, "Got some data");
+
+            let prev_state = app_state_watch.borrow().clone();
+            let new_state = data.inject_to(prev_state);
+            app_state_sink
+                .send(new_state)
+                .await
+                .expect("Cannot send data to channel");
+        }
+    }
+
+    pub fn add_producer<WorkerState>(
         mut self,
-        worker: impl worker::Worker<WorkerState> + Send + Sync + 'static,
+        worker: impl worker::ProducerWorker<WorkerState> + Send + Sync + 'static,
+    ) -> Self
+    where
+        WorkerState: InjectedTo<AppState> + fmt::Debug + Send + Sync + 'static,
+    {
+        let state_update = self.state_tx.clone();
+        let worker = Box::new(worker);
+        let runner = |state_channel: watch::Receiver<AppState>| {
+            let mut data_futures = Vec::new();
+            let (inducer_tx, inducer_rx) = mpsc::channel::<WorkerState>(100);
+            // `state_reducer and `state_mapper` propagate state to each consumer
+            data_futures
+                .push(Self::state_injector(inducer_rx, state_channel, state_update).boxed());
+            data_futures.push(worker.work(inducer_tx));
+
+            async move {
+                futures::future::join_all(data_futures).await;
+            }
+            .boxed()
+        };
+
+        self.runners.push(Box::new(runner));
+        self
+    }
+
+    pub fn add_consumer<WorkerState>(
+        mut self,
+        worker: impl worker::ConsumerWorker<WorkerState> + Send + Sync + 'static,
     ) -> Self
     where
         WorkerState: Reduced<AppState> + fmt::Debug + Send + Sync + 'static,
     {
-        let mut state_update = self.state_tx.clone();
         let worker = Box::new(worker);
         let runner = |state_channel: watch::Receiver<AppState>| {
-            let (mut reducer_tx, mut reducer_rx) = mpsc::channel(1);
-            let (inducer_tx, mut inducer_rx) = mpsc::channel::<WorkerState>(1);
+            let mut data_futures = Vec::new();
 
-            let mut state_stream = WatchStream::new(state_channel.clone());
-
-            tokio::spawn(async move {
-                while let Some(data) = state_stream.next().await {
-                    let new_data = WorkerState::reduce(data);
-                    reducer_tx
-                        .send(new_data)
-                        .await
-                        .expect("Cannot send data to channel");
-                }
-            });
-
-            tokio::spawn(async move {
-                while let Some(data) = inducer_rx.next().await {
-                    info!("Got some data");
-                    let prev_state = state_channel.borrow().clone();
-                    let new_state = data.induce(prev_state);
-                    state_update
-                        .send(new_state)
-                        .await
-                        .expect("Cannot send data to channel");
-                }
-            });
+            let state_stream = WatchStream::new(state_channel);
 
             let (reduced_state_tx, reduced_state_rx) = tokio::sync::watch::channel(None);
 
-            tokio::spawn(async move {
-                while let Some(item) = reducer_rx.next().await {
-                    reduced_state_tx.send(Some(item)).ok();
-                }
-            });
+            data_futures.push(Self::state_reducer(state_stream, reduced_state_tx).boxed());
+            data_futures.push(worker.work(reduced_state_rx));
 
-            async move { worker.work(reduced_state_rx, inducer_tx).await }.boxed()
+            async move {
+                futures::future::join_all(data_futures).await;
+            }
+            .boxed()
+        };
+
+        self.runners.push(Box::new(runner));
+        self
+    }
+
+    pub fn add_worker<Consumed, Produced>(
+        mut self,
+        worker: impl worker::Worker<Consumed, Produced> + Send + Sync + 'static,
+    ) -> Self
+    where
+        Consumed: Reduced<AppState>+ fmt::Debug + Send + Sync + 'static,
+        Produced: InjectedTo<AppState>+ fmt::Debug + Send + Sync + 'static,
+    {
+        let state_update = self.state_tx.clone();
+        let worker = Box::new(worker);
+        let runner = |state_channel: watch::Receiver<AppState>| {
+            let mut data_futures = Vec::new();
+            let (inducer_tx, inducer_rx) = mpsc::channel::<Produced>(100);
+
+            let state_stream = WatchStream::new(state_channel.clone());
+
+            let (reduced_state_tx, reduced_state_rx) = tokio::sync::watch::channel(None);
+
+            // `state_reducer and `state_mapper` propagate state to each consumer
+            data_futures.push(Self::state_reducer(state_stream, reduced_state_tx).boxed());
+            data_futures
+                .push(Self::state_injector(inducer_rx, state_channel, state_update).boxed());
+            data_futures.push(worker.work(reduced_state_rx, inducer_tx));
+
+            async move {
+                futures::future::join_all(data_futures).await;
+            }
+            .boxed()
         };
 
         self.runners.push(Box::new(runner));

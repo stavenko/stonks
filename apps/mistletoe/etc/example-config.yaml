@@ -1,0 +1,7 @@
+price_feed:
+  market_source: binance
+  ticker: ETHUSDT
+  api_host: https://api.binance.com
+  ws_host: wss://stream.binance.com:443
+  time_unit: 1m
+
