@@ -13,5 +13,3 @@ pub struct Candle {
     pub volume: f64,
     pub quote_volume: f64,
 }
-
-
