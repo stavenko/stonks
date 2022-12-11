@@ -49,7 +49,8 @@ impl Event {
 
 #[cfg(test)]
 mod test {
-    use crate::orderbook::OrderBook;
+
+    use crate::orderbook::WsOrderBook;
 
     use super::StreamData;
 
@@ -76,7 +77,7 @@ mod test {
 
         assert_eq!(package.event.event_type, "depthUpdate");
 
-        let ob: OrderBook = serde_json::from_value(package.event.data()).unwrap();
+        let ob: WsOrderBook = serde_json::from_value(package.event.data()).unwrap();
 
         assert_eq!(ob.asks.len(), 1)
     }

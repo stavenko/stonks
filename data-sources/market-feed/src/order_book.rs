@@ -1,8 +1,10 @@
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct OrderBook {
     pub asks: Vec<[f64; 2]>,
     pub bids: Vec<[f64; 2]>,
 }
+
+impl Eq for OrderBook {}
 
 fn join_arr(state: &mut Vec<[f64; 2]>, update: &[[f64; 2]]) {
     for a in update {

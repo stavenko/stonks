@@ -10,8 +10,8 @@ use tracing::{error, info, debug};
 
 pub mod worker;
 
-pub trait Reduced<S> {
-    fn reduce(state: S) -> Self;
+pub trait Reduced<T> {
+    fn reduce(&mut self) -> T;
 }
 
 pub trait InjectedTo<S> {
@@ -70,19 +70,26 @@ where
 
 impl<'f, AppState> AppBuilder<'f, AppState>
 where
-    AppState: Clone + Send + Sync + 'static,
+    AppState: Eq +  Clone + Send + Sync + 'static,
 {
     async fn state_reducer<WorkerState>(
         mut state_stream: impl Stream<Item = AppState> + Unpin,
+        mut state_sink: impl Sink<AppState> + Unpin,
         consumer: watch::Sender<Option<WorkerState>>,
     ) where
-        WorkerState: Reduced<AppState> + Send + fmt::Debug,
+        WorkerState: Send + fmt::Debug,
+        AppState: Reduced<WorkerState>
     {
-        while let Some(data) = state_stream.next().await {
-            let new_data = WorkerState::reduce(data);
+        while let Some(mut state) = state_stream.next().await {
+            let old_state = state.clone(); // this seems like a wrong idea here
+            let worker_data = state.reduce();
+
             consumer
-                .send(Some(new_data))
+                .send(Some(worker_data))
                 .expect("Cannot send data to channel");
+            if old_state != state {
+                state_sink.send(state).await;
+            }
         }
     }
 
@@ -108,10 +115,10 @@ where
 
     pub fn add_producer<WorkerState>(
         mut self,
-        worker: impl worker::ProducerWorker<WorkerState> + Send + Sync + 'static,
+        worker: impl worker::ProducerWorker<'f, WorkerState> + Send + Sync + 'static,
     ) -> Self
     where
-        WorkerState: InjectedTo<AppState> + fmt::Debug + Send + Sync + 'static,
+        WorkerState: InjectedTo<AppState> + fmt::Debug + Send + Sync + 'f,
     {
         let state_update = self.state_tx.clone();
         let worker = Box::new(worker);
@@ -133,14 +140,16 @@ where
         self
     }
 
-    pub fn add_consumer<WorkerState>(
+    pub fn add_consumer< WorkerState>(
         mut self,
-        worker: impl worker::ConsumerWorker<WorkerState> + Send + Sync + 'static,
+        worker: impl worker::ConsumerWorker<'f, WorkerState> + Send + Sync + 'static,
     ) -> Self
     where
-        WorkerState: Reduced<AppState> + fmt::Debug + Send + Sync + 'static,
+        WorkerState: fmt::Debug + Send + Sync + 'f,
+        AppState: Reduced<WorkerState>
     {
         let worker = Box::new(worker);
+        let state_tx = self.state_tx.clone();
         let runner = |state_channel: watch::Receiver<AppState>| {
             let mut data_futures = Vec::new();
 
@@ -148,7 +157,7 @@ where
 
             let (reduced_state_tx, reduced_state_rx) = tokio::sync::watch::channel(None);
 
-            data_futures.push(Self::state_reducer(state_stream, reduced_state_tx).boxed());
+            data_futures.push(Self::state_reducer(state_stream, state_tx, reduced_state_tx).boxed());
             data_futures.push(worker.work(reduced_state_rx));
 
             async move {
@@ -163,11 +172,12 @@ where
 
     pub fn add_worker<Consumed, Produced>(
         mut self,
-        worker: impl worker::Worker<Consumed, Produced> + Send + Sync + 'static,
+        worker: impl worker::Worker<'f, Consumed, Produced> + Send + Sync + 'static,
     ) -> Self
     where
-        Consumed: Reduced<AppState>+ fmt::Debug + Send + Sync + 'static,
-        Produced: InjectedTo<AppState>+ fmt::Debug + Send + Sync + 'static,
+        Consumed: fmt::Debug + Send + Sync + 'f,
+        Produced: InjectedTo<AppState>+ fmt::Debug + Send + Sync + 'f,
+        AppState: Reduced<Consumed>
     {
         let state_update = self.state_tx.clone();
         let worker = Box::new(worker);
@@ -180,7 +190,7 @@ where
             let (reduced_state_tx, reduced_state_rx) = tokio::sync::watch::channel(None);
 
             // `state_reducer and `state_mapper` propagate state to each consumer
-            data_futures.push(Self::state_reducer(state_stream, reduced_state_tx).boxed());
+            data_futures.push(Self::state_reducer(state_stream, state_update.clone(),reduced_state_tx).boxed());
             data_futures
                 .push(Self::state_injector(inducer_rx, state_channel, state_update).boxed());
             data_futures.push(worker.work(reduced_state_rx, inducer_tx));

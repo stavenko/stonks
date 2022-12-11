@@ -17,6 +17,7 @@ impl ToChannel for CandleStream {
 }
 
 #[derive(Serialize, Debug)]
+#[serde(rename_all="camelCase")]
 pub struct CandlesQuery {
     pub symbol: String,
     #[serde(serialize_with = "ser_time_unit")]
@@ -24,6 +25,7 @@ pub struct CandlesQuery {
     pub start_time: Option<u64>,
     pub end_time: Option<u64>,
     pub limit: Option<u32>,
+    pub offset: Option<u32>,
 }
 
 #[derive(Deserialize, Debug)]

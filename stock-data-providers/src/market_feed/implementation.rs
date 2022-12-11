@@ -16,9 +16,11 @@ impl PriceFeed {
             time_unit,
             ticker,
             orderbook_depth,
+            candles_amount,
         } = config;
 
         Self {
+            candles_amount,
             api_host,
             ws_host,
             ticker,
@@ -82,10 +84,12 @@ impl PriceFeed {
         mut candles_stream: impl Stream<Item = Candle> + Send + Sync + Unpin + 'f,
         mut sink: impl Sink<Candles> + Send + Sync + Unpin + 'f,
     ) -> BoxFuture<'f, ()> {
+        let candles_amount = self.candles_amount;
         async move {
             let mut candles = fetched_candles;
             while let Some(candle) = candles_stream.next().await {
                 candles.join(candle);
+                candles.split_on(candles_amount);
                 if sink.send(candles.clone()).await.is_err() {
                     error!("Sink must be ok");
                     panic!();
@@ -105,6 +109,7 @@ impl PriceFeed {
             ticker: self.ticker.clone(),
             time_unit: self.time_unit.clone(),
             api_host: self.api_host.clone(),
+            countback: self.candles_amount,
         })
         .await;
 

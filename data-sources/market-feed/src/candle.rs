@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use sources_common::time_unit::TimeUnit;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Candle {
     pub ts: Duration,
     pub time_unit: TimeUnit,
@@ -14,4 +14,5 @@ pub struct Candle {
     pub quote_volume: f64,
 }
 
-
+impl Eq for Candle {
+}

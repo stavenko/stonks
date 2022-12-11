@@ -4,4 +4,8 @@ price_feed:
   api_host: https://api.binance.com
   ws_host: wss://stream.binance.com:443
   time_unit: 1m
-
+predictor:
+  ticker: ETHUSDT
+  volume_weight_threshold: 0.5
+tg:
+  storage_path: /Users/vasilijstavenko/.bot-storage

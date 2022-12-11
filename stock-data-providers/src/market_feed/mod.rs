@@ -21,10 +21,11 @@ pub struct PriceFeed {
     ticker: String,
     time_unit: TimeUnit,
     orderbook_depth: u32,
+    candles_amount: usize,
 }
 
-impl ProducerWorker<PriceFeedData> for PriceFeed {
-    fn work<'f>(
+impl<'f> ProducerWorker<'f, PriceFeedData> for PriceFeed {
+    fn work(
         self: Box<Self>,
         mut state_tx: app::mpsc::Sender<PriceFeedData>,
     ) -> BoxFuture<'f, ()> {
