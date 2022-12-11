@@ -1,0 +1,16 @@
+[package]
+name = "tg-reporter"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+app = { version = "0.1.0", path = "../../app" }
+futures = { version = "0.3.25", default-features = false }
+serde = { version = "1.0.149", features = ["derive"] }
+serde_json = "1.0.89"
+telegram-bot-raw = "0.8.0"
+tg-api = { version = "0.1.0", path = "../tg-api" }
+tokio = { version = "1.23.0", default-features = false, features = ["sync", "fs"] }
+tracing = "0.1.37"

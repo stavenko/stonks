@@ -1,8 +1,8 @@
-use std::{str::FromStr, borrow::Cow};
+use std::{str::FromStr, borrow::Cow, time::Duration};
 
 use serde::{Deserialize, Serializer, Deserializer, de};
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct TimeUnit(#[serde(deserialize_with = "deser_time_unit_u32_from_string")] u32);
 
 
@@ -15,6 +15,12 @@ static WEEK: u32 = 7 * DAY;
 impl TimeUnit {
     pub fn secs(v: u32) -> Self {
         TimeUnit(v)
+    }
+
+    pub fn calc_n(&self, v:u32) -> Duration {
+        let secs = (self.0 as u64) * (v as u64);
+        Duration::from_secs(secs)
+
     }
 
     pub fn mins(v: u32) -> Self {

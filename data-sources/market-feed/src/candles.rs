@@ -1,9 +1,10 @@
 use std::{cmp::Ordering, slice::Iter};
 
 use crate::candle::Candle;
+use sources_common::time_unit::TimeUnit;
 use tracing::info;
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub struct Candles(Vec<Candle>);
 
 impl IntoIterator for Candles {
@@ -32,9 +33,16 @@ impl Candles {
     pub fn total_volume(&self) -> f64 {
         self.0.iter().map(|candle| candle.volume).sum()
     }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
 
     fn latest_candle(&self) -> Option<&Candle> {
         self.0.last()
+    }
+
+    pub fn time_unit(&self) -> Option<TimeUnit> {
+        self.latest_candle().map(|c| c.time_unit.clone())
     }
 
     pub fn last_volume_weight(&self) -> f64 {
@@ -74,7 +82,8 @@ impl Candles {
     }
 
     pub fn split_on(&mut self, to_size: usize) -> Vec<Candle> {
-        let left_off = self.0.split_off(to_size);
+        let split_at = self.0.len() - to_size;
+        let left_off = self.0.split_off(split_at);
         std::mem::replace(&mut self.0, left_off)
     }
 }

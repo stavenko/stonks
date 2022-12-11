@@ -1,3 +1,5 @@
+use std::time::{SystemTime, Duration, UNIX_EPOCH};
+
 use binance::{
     candle::{CandleStream, WsCandle},
     orderbook::{self, OrderBookChannel, OrderBookQuery},
@@ -15,17 +17,26 @@ use crate::{
 pub async fn fetch_candles(input: FetchCandlesInput) -> Candles {
     use binance::candle::CandlesQuery;
     use binance::fetch_candles;
+    let from = SystemTime::now() - input.time_unit.calc_n(50);
+    let to = SystemTime::now() + input.time_unit.calc_n(1);
+    let from = from.duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let to = to.duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+    info!("from {} now: {}", from, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
     let bin_candles = fetch_candles(
         input.api_host,
         CandlesQuery {
             symbol: input.ticker,
             interval: input.time_unit.clone(),
-            start_time: None,
+            start_time: Some(from * 1000),
             end_time: None,
             limit: None,
+            offset: None,
         },
     )
     .await;
+
+    info!("Fetched {} candles", bin_candles.len());
 
     bin_candles
         .into_iter()

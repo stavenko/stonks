@@ -7,4 +7,5 @@ price_feed:
 predictor:
   ticker: ETHUSDT
   volume_weight_threshold: 0.5
-
+tg:
+  storage_path: /Users/vasilijstavenko/.bot-storage

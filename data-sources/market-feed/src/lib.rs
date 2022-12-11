@@ -23,6 +23,7 @@ pub struct FetchCandlesInput {
     pub api_host: Url,
     pub ticker: String,
     pub time_unit: TimeUnit,
+    pub countback: usize,
 }
 
 pub struct FetchOrderbookInput {
