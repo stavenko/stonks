@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 app = { version = "0.1.0", path = "../app" }
 futures = "0.3.25"
+humantime-serde = "1.1.1"
 market-feed = { version = "0.1.0", path = "../data-sources/market-feed" }
 reqwest = "0.11.13"
 serde = { version = "1.0.148", features = ["derive"] }

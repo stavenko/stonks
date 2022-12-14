@@ -1,20 +1,24 @@
 use core::fmt;
+use std::time::Duration;
 
 use candle::{Candle, CandlesQuery};
 use error::Error;
 use futures::{channel::mpsc, SinkExt, Stream, StreamExt};
+use historical_trades::{AllHistoricalTradesQuery, ApiHistoricalTrade, HistoricalTradesQuery, Query};
 use orderbook::{ApiOrderBook, OrderBookQuery};
 use serde::{de::DeserializeOwned, Serialize};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 use tracing::{debug, info};
 use url::Url;
 
-use crate::protocol::{StreamData, SubscribeMessage, Response};
+use crate::protocol::{Response, StreamData, SubscribeMessage};
 
 pub mod candle;
 pub mod error;
+pub mod historical_trades;
 pub mod orderbook;
 pub mod protocol;
+pub mod serde_utils;
 
 pub trait ToChannel {
     fn to_channel(&self) -> String;
@@ -83,8 +87,14 @@ where
     info!(?query, ?qs, "Run query");
 
     url.set_query(Some(&qs));
-
-    let result = reqwest::get(url).await.unwrap().text().await.unwrap();
+    let result = reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
 
     match serde_json::from_str::<Response<R>>(&result) {
         Ok(Response::Success(t)) => t,
@@ -104,4 +114,44 @@ pub async fn fetch_candles(api_host: Url, candles_query: CandlesQuery) -> Vec<Ca
 
 pub async fn fetch_orderbook(api_host: Url, orderbook_query: OrderBookQuery) -> ApiOrderBook {
     fetch(api_host, "/api/v3/depth", orderbook_query).await
+}
+
+pub async fn fetch_historical_trades(
+    api_host: Url,
+    historical_trades_query: HistoricalTradesQuery,
+) -> Vec<ApiHistoricalTrade> {
+    fetch(
+        api_host,
+        "/api/v3/historicalTrades",
+        historical_trades_query.query,
+    )
+    .await
+}
+
+pub async fn fetch_all_historical_trades(
+    api_host: Url,
+    all_historical_trades_query: AllHistoricalTradesQuery,
+) -> Vec<ApiHistoricalTrade> {
+    let mut trades: Vec<Vec<ApiHistoricalTrade>> = Vec::new();
+    loop {
+        if let Some(true) = trades
+            .last()
+            .and_then(|r| r.first())
+            .map(|first_trade| first_trade.time < all_historical_trades_query.query.from_date) {
+                break;
+        }
+
+        let last_id = trades.last().and_then(|t| t.first()).map(|t| t.id);
+
+        trades.push(fetch_historical_trades(api_host.clone(), HistoricalTradesQuery { 
+            query: Query{
+                ticker: all_historical_trades_query.query.ticker.clone(),
+                from_id: last_id, 
+            },
+            api_key: all_historical_trades_query.api_key.clone()
+        }).await);
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    trades.into_iter().rev().flatten().collect()
 }
