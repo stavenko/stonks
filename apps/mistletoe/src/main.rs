@@ -2,7 +2,7 @@ use std::fs::File;
 
 use app::{App, InjectedTo, Reduced};
 use clap::Parser;
-use market_feed::{candles::Candles, order_book::OrderBook};
+use market_feed::{candles::Candles, order_book::OrderBook, trade::TradesAggregate};
 use predictor::{PredictorSignal, WorkerInput};
 use serde::Deserialize;
 use stock_data_providers::market_feed::{config::PriceFeedConfig, PriceFeed, PriceFeedData};
@@ -17,6 +17,7 @@ mod predictor;
 struct Mistletoe {
     candles: Candles,
     orderbook: OrderBook,
+    trades_aggregate: TradesAggregate,
     trade_signals: Vec<PredictorSignal>,
 }
 
@@ -34,12 +35,18 @@ struct Opts {
 }
 
 impl InjectedTo<Mistletoe> for PriceFeedData {
-    fn inject_to(self, state: Mistletoe) -> Mistletoe {
-        Mistletoe {
-            candles: self.candles,
-            orderbook: self.orderbook,
-            ..state
+    fn inject_to(self, mut state: Mistletoe) -> Mistletoe {
+
+        if let Some(c) = self.candles {
+            state.candles = c;
         }
+        if let Some(c) = self.orderbook {
+            state.orderbook = c;
+        }
+        if let Some(t) = self.trades_aggregate {
+            state.trades_aggregate = t;
+        }
+        state
     }
 }
 
@@ -55,13 +62,6 @@ impl Reduced<WorkerInput> for Mistletoe {
         (self.candles.clone(), self.orderbook.clone())
     }
 }
-/*
-impl Reduced<Mistletoe> for WorkerInput {
-    fn reduce(state: Mistletoe) -> Self {
-        (state.candles, state.orderbook)
-    }
-}
-*/
 
 impl Reduced<Vec<PredictorSignal>> for Mistletoe {
     fn reduce(&mut self) -> Vec<PredictorSignal> {

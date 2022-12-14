@@ -1,9 +1,11 @@
-use std::time::{SystemTime, Duration, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use binance::{
     candle::{CandleStream, WsCandle},
+    historical_trades::{HistoricalTradesChannel, AllHistoricalTradesQuery},
     orderbook::{self, OrderBookChannel, OrderBookQuery},
     protocol::{StreamData, StreamPackage},
+    ToChannel,
 };
 use futures::{Stream, StreamExt};
 use sources_common::time_unit::TimeUnit;
@@ -11,7 +13,7 @@ use tracing::{debug, error, info};
 
 use crate::{
     candle::Candle, candles::Candles, order_book::OrderBook, FetchCandlesInput,
-    FetchOrderbookInput, MarketFeedInput, MarketFeedMessage,
+    FetchOrderbookInput, MarketFeedInput, MarketFeedMessage, MarketFeedSettings, FetchHistoricalTradesInput, trade::{Trade, Trades},
 };
 
 pub async fn fetch_candles(input: FetchCandlesInput) -> Candles {
@@ -22,7 +24,14 @@ pub async fn fetch_candles(input: FetchCandlesInput) -> Candles {
     let from = from.duration_since(UNIX_EPOCH).unwrap().as_secs();
     let to = to.duration_since(UNIX_EPOCH).unwrap().as_secs();
 
-    info!("from {} now: {}", from, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
+    info!(
+        "from {} now: {}",
+        from,
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    );
     let bin_candles = fetch_candles(
         input.api_host,
         CandlesQuery {
@@ -58,20 +67,30 @@ pub async fn fetch_orderbook(input: FetchOrderbookInput) -> OrderBook {
     orderbook.into()
 }
 
+pub async fn fetch_historical_trades(input: FetchHistoricalTradesInput) -> Trades {
+    let trades = binance::fetch_all_historical_trades(
+        input.api_host,
+        AllHistoricalTradesQuery{
+            api_key: input.api_key,
+            query: binance::historical_trades::AllQuery { 
+                ticker: input.ticker, 
+                from_date: input.from,
+            }
+        }
+
+    )
+    .await;
+
+    Trades::new(trades.into_iter().map(Into::into).collect())
+}
+
 pub async fn create_market_feed(
     input: MarketFeedInput,
 ) -> Option<impl Stream<Item = MarketFeedMessage> + Send + Sync> {
+    let channels = input.get_channels();
     let stream = binance::get_market_stream(
         input.ws_url,
-        vec![
-            Box::new(CandleStream {
-                ticker: input.ticker.clone(),
-                time_unit: input.time_unit,
-            }),
-            Box::new(OrderBookChannel {
-                ticker: input.ticker,
-            }),
-        ],
+        channels,
     )
     .await;
 
@@ -89,6 +108,16 @@ pub async fn create_market_feed(
     }))
 }
 
+impl From<binance::historical_trades::ApiHistoricalTrade> for Trade {
+    fn from(item: binance::historical_trades::ApiHistoricalTrade) -> Self {
+        Self {
+            price: item.price,
+            quantity: item.qty,
+            quote_quantity: item.quote_qty,
+            time: item.time
+        }
+    }
+}
 impl From<binance::orderbook::WsOrderBook> for OrderBook {
     fn from(ob: binance::orderbook::WsOrderBook) -> Self {
         Self {
@@ -180,5 +209,28 @@ impl TryFrom<StreamData> for MarketFeedMessage {
                 serde_json::to_string_pretty(&response).unwrap()
             )),
         }
+    }
+}
+
+impl MarketFeedInput {
+    fn get_channels(&self) -> Vec<Box<dyn ToChannel + Send>> {
+        self.settings
+            .iter()
+            .map(|settings| {
+                let b: Box<dyn ToChannel + Send> = match settings {
+                    MarketFeedSettings::Candle(tu) => Box::new(CandleStream {
+                        ticker: self.ticker.clone(),
+                        time_unit: tu.clone(),
+                    }),
+                    MarketFeedSettings::OrderBook => Box::new(OrderBookChannel {
+                        ticker: self.ticker.clone(),
+                    }),
+                    MarketFeedSettings::Trades => Box::new(HistoricalTradesChannel {
+                        ticker: self.ticker.clone(),
+                    }),
+                };
+                b
+            })
+            .collect()
     }
 }

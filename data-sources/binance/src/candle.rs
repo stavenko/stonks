@@ -2,6 +2,7 @@ use std::{borrow::Cow, time::Duration};
 
 use serde::{de, Deserialize, Deserializer, Serialize};
 use sources_common::time_unit::{ser_time_unit, TimeUnit};
+use crate::serde_utils::deser_duration_from_integer;
 
 use crate::ToChannel;
 
@@ -108,12 +109,6 @@ pub fn deser_float_from_string<'de, D: Deserializer<'de>>(
     string_value.as_ref().parse().map_err(de::Error::custom)
 }
 
-pub fn deser_duration_from_integer<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<Duration, D::Error> {
-    let number = <u64>::deserialize(deserializer)?;
-    Ok(Duration::from_millis(number))
-}
 
 #[cfg(test)]
 mod tests {
