@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{fmt::Debug, io::Write, path::PathBuf};
 
-use app::{BoxFuture, FutureExt, Sink, SinkExt, Stream, StreamExt};
+use app::{worker::ConsumerWorker, BoxFuture, FutureExt, Sink, SinkExt, Stream, StreamExt};
 use telegram_bot_raw::{
     ChatId, ChatMemberStatus, ChatRef, GetUpdates, MessageChat, SendMessage, UpdateKind,
 };
@@ -22,11 +22,10 @@ pub enum ChatMessage {
 }
 
 impl TelegramReporter {
-
     pub fn send_loop<'f, St, T>(
         &'f self,
         mut rx: St,
-        mut state_rx: watch::Receiver<Option<Vec<T>>>,
+        mut state_rx: impl Stream<Item = Vec<T>> + Send + Sync + Unpin +'f,
     ) -> BoxFuture<'f, ()>
     where
         St: Stream<Item = ChatMessage> + Unpin + Send + 'f,
@@ -59,16 +58,17 @@ impl TelegramReporter {
                         info!(?chats, "Save chats to storage");
                         Self::save_chats(&chats, &storage_path).await;
                     },
-                    _ = state_rx.changed() => {
-                        let mut messages = Vec::new();
-                        if let Some(new_state) = state_rx.borrow().as_ref() {
-                            for signal in new_state {
-                                messages.push(format!("{}", signal));
-                            }
-                        }
-                        if !messages.is_empty() {
-                            info!("broadcast to chats");
-                            Self::broadcast(&api, &messages, &chats).await;
+                    signals = state_rx.next() => {
+                        match signals {
+                            Some(signals) => {
+
+
+                                Self::broadcast(
+                                    &api, 
+                                    &signals.into_iter().map(|s| format!("{}", s)).collect::<Vec<_>>(),
+                                    &chats).await;
+                            },
+                            None => {break;}
                         }
 
                     }
@@ -94,10 +94,12 @@ impl TelegramReporter {
 
     async fn broadcast(api: &Api, text: &[String], chats: &[i64]) {
         let message = text.join("\n---------\n");
+        if ! message.is_empty() {
         for chat_id in chats {
             let chat = ChatRef::from_chat_id(ChatId::new(*chat_id));
             let send_message = SendMessage::new(chat, &message);
             api.send_message(send_message).await.unwrap();
+        }
         }
     }
 

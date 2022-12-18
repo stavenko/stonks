@@ -6,11 +6,11 @@ use serde::{Deserialize, Serializer, Deserializer, de};
 pub struct TimeUnit(#[serde(deserialize_with = "deser_time_unit_u32_from_string")] u32);
 
 
-static SECOND: u32 = 1;
-static MINUTE: u32 = 60 * SECOND;
-static HOUR: u32 = 60 * MINUTE;
-static DAY: u32 = 24 * HOUR;
-static WEEK: u32 = 7 * DAY;
+pub static SECOND: u32 = 1;
+pub static MINUTE: u32 = 60 * SECOND;
+pub static HOUR: u32 = 60 * MINUTE;
+pub static DAY: u32 = 24 * HOUR;
+pub static WEEK: u32 = 7 * DAY;
 
 impl TimeUnit {
     pub fn secs(v: u32) -> Self {

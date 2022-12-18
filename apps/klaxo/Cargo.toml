@@ -1,0 +1,19 @@
+[package]
+name = "klaxo"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+app = { version = "0.1.0", path = "../../app" }
+clap = { version = "4.0.29", features = ["derive"] }
+multi-price-feed = { version = "0.1.0", path = "../../data-sources/multi-price-feed" }
+serde_yaml = "0.9.15"
+tokio = { version = "1.23.0", features = ["tokio-macros", "macros"] }
+url = "2.3.1"
+tg-reporter = { version = "0.1.0", path = "../../connectivity/tg-reporter" }
+serde = "1.0.151"
+tracing-subscriber = "0.3.16"
+tracing = "0.1.37"
+humantime-serde = "1.1.1"

@@ -37,18 +37,25 @@ impl TelegramReporter {
 
 
 
-impl<'f, T> ConsumerWorker<'f, Vec<T>> for TelegramReporter 
+impl<'f, T> ConsumerWorker<'f, Vec<T>, app::mpsc::SendError> for TelegramReporter 
 where 
-    T: fmt::Display + Sync + Send + 'f
+    T: fmt::Display + Sync + Send + 'f,
 {
+
+    type Sink = mpsc::UnboundedSender<Vec<T>>;
+    type Stream = mpsc::UnboundedReceiver<Vec<T>>;
+
+    fn provide_input_stream(&self) -> (Self::Sink, Self::Stream) {
+        mpsc::unbounded()
+    }
+
 
     fn work(
             self: Box<Self>,
-            state_rx: watch::Receiver<Option<Vec<T>>>,
+            state_rx: Self::Stream,
         ) -> app::BoxFuture<'f, ()>
 
     {
-        
 
         async move {
             let mut futures = Vec::new();
