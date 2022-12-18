@@ -1,0 +1,4 @@
+threshold: 0.01
+period: 15m
+tg:
+  storage_path: /Users/vasilijstavenko/.bot-storage
