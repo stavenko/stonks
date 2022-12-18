@@ -1,8 +1,8 @@
 use std::{borrow::Cow, time::Duration};
 
+use crate::serde_utils::{deser_duration_from_integer, deser_float_from_string};
 use serde::{de, Deserialize, Deserializer, Serialize};
 use sources_common::time_unit::{ser_time_unit, TimeUnit};
-use crate::serde_utils::deser_duration_from_integer;
 
 use crate::ToChannel;
 
@@ -13,12 +13,16 @@ pub struct CandleStream {
 
 impl ToChannel for CandleStream {
     fn to_channel(&self) -> String {
-        format!("{}@kline_{}", self.ticker.to_lowercase(), self.time_unit.fmt())
+        format!(
+            "{}@kline_{}",
+            self.ticker.to_lowercase(),
+            self.time_unit.fmt()
+        )
     }
 }
 
 #[derive(Serialize, Debug)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct CandlesQuery {
     pub symbol: String,
     #[serde(serialize_with = "ser_time_unit")]
@@ -98,17 +102,9 @@ pub struct WsCandleData {
 
 #[derive(Deserialize, Debug)]
 pub struct WsCandle {
-    #[serde(rename="k")]
-    pub data: WsCandleData
+    #[serde(rename = "k")]
+    pub data: WsCandleData,
 }
-
-pub fn deser_float_from_string<'de, D: Deserializer<'de>>(
-    deserializer: D,
-) -> Result<f64, D::Error> {
-    let string_value = Cow::<str>::deserialize(deserializer)?;
-    string_value.as_ref().parse().map_err(de::Error::custom)
-}
-
 
 #[cfg(test)]
 mod tests {

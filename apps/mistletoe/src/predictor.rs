@@ -79,6 +79,9 @@ impl Predictor {
         let volume_weight = candles.last_volume_weight();
         let ticker = self.ticker.clone();
 
+        // Use distance from average as indicator
+        // Use normalized volume in last candle - volume in moment as it will be in 
+
         if current < min && volume_weight > self.volume_weight_threshold {
             return Some(PredictorSignal::TradeSignal {
                 time: SystemTime::now(),

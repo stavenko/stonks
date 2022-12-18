@@ -72,12 +72,13 @@ impl<'f, AppState> AppBuilder<'f, AppState>
 where
     AppState: Eq +  Clone + Send + Sync + 'static,
 {
-    async fn state_reducer<WorkerState>(
+    async fn state_reducer<WorkerState, E>(
         mut state_stream: impl Stream<Item = AppState> + Unpin,
         mut state_sink: impl Sink<AppState> + Unpin,
-        consumer: watch::Sender<Option<WorkerState>>,
+        mut consumer: impl Sink<WorkerState, Error=E> +Send+ Unpin,
     ) where
         WorkerState: Send + fmt::Debug,
+        E: fmt::Debug + Send + Sync,
         AppState: Reduced<WorkerState>
     {
         while let Some(mut state) = state_stream.next().await {
@@ -85,7 +86,8 @@ where
             let worker_data = state.reduce();
 
             consumer
-                .send(Some(worker_data))
+                .send(worker_data)
+                .await
                 .expect("Cannot send data to channel");
             if old_state != state {
                 state_sink.send(state).await;
@@ -140,12 +142,13 @@ where
         self
     }
 
-    pub fn add_consumer< WorkerState>(
+    pub fn add_consumer< WorkerState, E>(
         mut self,
-        worker: impl worker::ConsumerWorker<'f, WorkerState> + Send + Sync + 'static,
+        worker: impl worker::ConsumerWorker<'f, WorkerState, E> + Send + Sync + 'static,
     ) -> Self
     where
         WorkerState: fmt::Debug + Send + Sync + 'f,
+        E: fmt::Debug + Send + Sync + 'f,
         AppState: Reduced<WorkerState>
     {
         let worker = Box::new(worker);
@@ -155,7 +158,10 @@ where
 
             let state_stream = WatchStream::new(state_channel);
 
-            let (reduced_state_tx, reduced_state_rx) = tokio::sync::watch::channel(None);
+            let (
+                reduced_state_tx,
+                reduced_state_rx
+                ) = worker.provide_input_stream();
 
             data_futures.push(Self::state_reducer(state_stream, state_tx, reduced_state_tx).boxed());
             data_futures.push(worker.work(reduced_state_rx));
@@ -170,13 +176,14 @@ where
         self
     }
 
-    pub fn add_worker<Consumed, Produced>(
+    pub fn add_worker<Consumed, Produced, E>(
         mut self,
-        worker: impl worker::Worker<'f, Consumed, Produced> + Send + Sync + 'static,
+        worker: impl worker::Worker<'f, Consumed, Produced, E> + Send + Sync + 'static,
     ) -> Self
     where
         Consumed: fmt::Debug + Send + Sync + 'f,
         Produced: InjectedTo<AppState>+ fmt::Debug + Send + Sync + 'f,
+        E: fmt::Debug + Send + Sync + 'f,
         AppState: Reduced<Consumed>
     {
         let state_update = self.state_tx.clone();
@@ -187,7 +194,10 @@ where
 
             let state_stream = WatchStream::new(state_channel.clone());
 
-            let (reduced_state_tx, reduced_state_rx) = tokio::sync::watch::channel(None);
+            let (
+                reduced_state_tx,
+                reduced_state_rx
+                ) = worker.provide_input_stream();
 
             // `state_reducer and `state_mapper` propagate state to each consumer
             data_futures.push(Self::state_reducer(state_stream, state_update.clone(),reduced_state_tx).boxed());
