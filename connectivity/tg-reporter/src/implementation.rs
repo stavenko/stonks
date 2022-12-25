@@ -2,7 +2,7 @@ use core::fmt;
 use std::{fmt::Debug, path::PathBuf};
 
 use app::{BoxFuture, FutureExt, Sink, SinkExt, Stream, StreamExt};
-use telegram_bot_raw::{ChatId, ChatMemberStatus, ChatRef, GetUpdates, SendMessage, UpdateKind};
+use telegram_bot_raw::{ChatId, ChatMemberStatus, ChatRef, GetUpdates, SendMessage, UpdateKind, ParseMode::MarkdownV2};
 use tg_api::Api;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -89,7 +89,9 @@ impl TelegramReporter {
         if !message.is_empty() {
             for chat_id in chats {
                 let chat = ChatRef::from_chat_id(ChatId::new(*chat_id));
-                let send_message = SendMessage::new(chat, &message);
+                let mut send_message = SendMessage::new(chat, &message);
+                send_message.parse_mode(MarkdownV2);
+
                 api.send_message(send_message).await.unwrap();
             }
         }
