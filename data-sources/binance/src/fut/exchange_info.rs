@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::serde_utils::deser_duration_from_integer;
+use toolset::deser_duration_from_integer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

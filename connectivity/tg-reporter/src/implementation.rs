@@ -1,15 +1,12 @@
 use core::fmt;
-use std::{fmt::Debug, io::Write, path::PathBuf};
+use std::{fmt::Debug, path::PathBuf};
 
-use app::{worker::ConsumerWorker, BoxFuture, FutureExt, Sink, SinkExt, Stream, StreamExt};
-use telegram_bot_raw::{
-    ChatId, ChatMemberStatus, ChatRef, GetUpdates, MessageChat, SendMessage, UpdateKind,
-};
+use app::{BoxFuture, FutureExt, Sink, SinkExt, Stream, StreamExt};
+use telegram_bot_raw::{ChatId, ChatMemberStatus, ChatRef, GetUpdates, SendMessage, UpdateKind};
 use tg_api::Api;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     select,
-    sync::watch,
 };
 use tracing::{error, info};
 
@@ -25,7 +22,7 @@ impl TelegramReporter {
     pub fn send_loop<'f, St, T>(
         &'f self,
         mut rx: St,
-        mut state_rx: impl Stream<Item = Vec<T>> + Send + Sync + Unpin +'f,
+        mut state_rx: impl Stream<Item = Vec<T>> + Send + Sync + Unpin + 'f,
     ) -> BoxFuture<'f, ()>
     where
         St: Stream<Item = ChatMessage> + Unpin + Send + 'f,
@@ -61,12 +58,7 @@ impl TelegramReporter {
                     signals = state_rx.next() => {
                         match signals {
                             Some(signals) => {
-
-
-                                Self::broadcast(
-                                    &api, 
-                                    &signals.into_iter().map(|s| format!("{}", s)).collect::<Vec<_>>(),
-                                    &chats).await;
+                                Self::broadcast(&api, &signals.into_iter().map(|s| format!("{}", s)).collect::<Vec<_>>(), &chats).await;
                             },
                             None => {break;}
                         }
@@ -94,12 +86,12 @@ impl TelegramReporter {
 
     async fn broadcast(api: &Api, text: &[String], chats: &[i64]) {
         let message = text.join("\n---------\n");
-        if ! message.is_empty() {
-        for chat_id in chats {
-            let chat = ChatRef::from_chat_id(ChatId::new(*chat_id));
-            let send_message = SendMessage::new(chat, &message);
-            api.send_message(send_message).await.unwrap();
-        }
+        if !message.is_empty() {
+            for chat_id in chats {
+                let chat = ChatRef::from_chat_id(ChatId::new(*chat_id));
+                let send_message = SendMessage::new(chat, &message);
+                api.send_message(send_message).await.unwrap();
+            }
         }
     }
 

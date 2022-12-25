@@ -1,13 +1,10 @@
 use telegram_bot_raw::{GetUpdates, SendMessage, UpdateKind};
 use tg_api::Api;
 
-
-
-async fn runner () {
+async fn runner() {
     let token = std::env::var("BOT_KEY").unwrap();
     let api = Api::new(token);
     let me = api.get_updates(GetUpdates::new()).await;
-
 
     println!("me:  {:#?}", me);
 
@@ -20,15 +17,12 @@ async fn runner () {
             let msg = SendMessage::new(chat, "I am bot!");
             if let Some(msg) = api.send_message(msg).await {
                 println!("Just sent message: {:#?}", msg);
-                
+
             }
         }
         _ => {println!("Unexpected");}
     }
     */
-    
-
-
 }
 
 #[tokio::main]

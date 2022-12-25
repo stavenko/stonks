@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use telegram_bot_raw::{
     CallbackQuery, ChannelPost, ChatMember, ExportChatInviteLink, InlineQuery, Integer, Message,
-    MessageChat, Poll, PollAnswer, User, RawChat,
+    MessageChat, Poll, PollAnswer, RawChat, User,
 };
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Deserialize)]

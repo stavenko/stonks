@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use crate::serde_utils::{deser_duration_from_integer, deser_float_from_string};
-use serde::{Deserialize, Serialize};
+use toolset::{deser_duration_from_integer, deser_float_from_string};
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct SymbolPrice {

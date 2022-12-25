@@ -1,15 +1,14 @@
 use std::time::Duration;
 
-use binance::{candle::CandleStream, orderbook::OrderBookChannel, ToChannel};
 use candle::Candle;
 use order_book::OrderBook;
 use sources_common::time_unit::TimeUnit;
 use url::Url;
 
-pub mod trade;
 pub mod candle;
 pub mod candles;
 pub mod order_book;
+pub mod trade;
 
 #[derive(Debug)]
 pub enum MarketFeedMessage {
@@ -28,7 +27,6 @@ pub struct MarketFeedInput {
     pub ws_url: Url,
     pub settings: Vec<MarketFeedSettings>,
 }
-
 
 pub struct FetchCandlesInput {
     pub api_host: Url,
@@ -55,5 +53,3 @@ mod binance_adaptor;
 
 #[cfg(feature = "binance")]
 pub use binance_adaptor::*;
-
-

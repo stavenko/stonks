@@ -12,12 +12,19 @@ use crate::{
     ToChannel,
 };
 
-use self::{historical_trades::{ApiHistoricalTrade, HistoricalTradesQuery, Query, AllHistoricalTradesQuery}, candle::{CandlesQuery, Candle}, orderbook::{OrderBookQuery, ApiOrderBook}, exchange_info::{ExchangeInfoRequest, ExchangeInfo}};
+use self::{
+    candle::{Candle, CandlesQuery},
+    exchange_info::{ExchangeInfo, ExchangeInfoRequest},
+    historical_trades::{
+        AllHistoricalTradesQuery, ApiHistoricalTrade, HistoricalTradesQuery, Query,
+    },
+    orderbook::{ApiOrderBook, OrderBookQuery},
+};
 
-mod candle;
-mod exchange_info;
-mod historical_trades;
-mod orderbook;
+pub mod candle;
+pub mod exchange_info;
+pub mod historical_trades;
+pub mod orderbook;
 
 fn conversion(text: String) -> Result<StreamData, Error> {
     let stream_data = serde_json::from_str::<StreamData>(&text)

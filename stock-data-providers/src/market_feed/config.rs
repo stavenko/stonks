@@ -14,13 +14,13 @@ pub struct CandleSettings {
 #[derive(Deserialize, Debug)]
 pub struct OrderbookSettings {
     #[serde(default = "default_orderbook_depth")]
-    pub(super) depth: u32
+    pub(super) depth: u32,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct TradesSettings {
-    #[serde(default = "default_trades_duration", with="humantime_serde")]
-    pub(super) from: Duration
+    #[serde(default = "default_trades_duration", with = "humantime_serde")]
+    pub(super) from: Duration,
 }
 
 #[derive(Deserialize)]
@@ -30,19 +30,19 @@ pub struct PriceFeedConfig {
     #[serde(deserialize_with = "deserialize_url")]
     pub(super) ws_host: Url,
 
-    #[serde(default="api_key_from_env")]
+    #[serde(default = "api_key_from_env")]
     pub(super) api_key: String,
-
 
     pub(super) ticker: String,
     pub(super) candles: Option<CandleSettings>,
     pub(super) orderbook: Option<OrderbookSettings>,
     pub(super) trades: Option<TradesSettings>,
-
+    pub(super) aggregate_tolerance: f64,
 }
 
 fn api_key_from_env() -> String {
-    std::env::var("BINANCE_API_KEY").expect("Provide api key via config or via env var 'BINANCE_API_KEY'")
+    std::env::var("BINANCE_API_KEY")
+        .expect("Provide api key via config or via env var 'BINANCE_API_KEY'")
 }
 
 fn default_orderbook_depth() -> u32 {

@@ -1,13 +1,16 @@
 use app::{mpsc, BoxFuture, FutureExt, Sink, SinkExt, Stream, StreamExt};
 use market_feed::{
-    candle::Candle, candles::Candles, create_market_feed, fetch_candles, fetch_orderbook,
-    order_book::OrderBook, FetchCandlesInput, FetchOrderbookInput, MarketFeedInput,
-    MarketFeedMessage, MarketFeedSettings, fetch_historical_trades, FetchHistoricalTradesInput, trade::{Trade, Trades, TradesAggregate},
+    candle::Candle,
+    candles::Candles,
+    create_market_feed, fetch_candles, fetch_historical_trades, fetch_orderbook,
+    order_book::OrderBook,
+    trade::{Trade, Trades, TradesAggregate},
+    FetchCandlesInput, FetchHistoricalTradesInput, FetchOrderbookInput, MarketFeedInput,
+    MarketFeedMessage, MarketFeedSettings,
 };
 use tracing::{error, info};
 
-use super::{config::PriceFeedConfig, PriceFeed };
-
+use super::{config::PriceFeedConfig, PriceFeed};
 
 impl PriceFeed {
     pub fn new(config: PriceFeedConfig) -> Self {
@@ -19,6 +22,7 @@ impl PriceFeed {
             api_host,
             ws_host,
             ticker,
+            aggregate_tolerance,
         } = config;
 
         Self {
@@ -29,6 +33,7 @@ impl PriceFeed {
             ticker,
             orderbook,
             trades,
+            aggregate_tolerance,
         }
     }
 
@@ -40,10 +45,14 @@ impl PriceFeed {
     ) {
         info!(?self, "Init stream");
         let candles = self
-            .candles.as_ref()
+            .candles
+            .as_ref()
             .map(|c| MarketFeedSettings::Candle(c.time_unit.clone()));
         let trades = self.trades.as_ref().map(|c| MarketFeedSettings::Trades);
-        let orderbook = self.orderbook.as_ref().map(|c| MarketFeedSettings::OrderBook);
+        let orderbook = self
+            .orderbook
+            .as_ref()
+            .map(|c| MarketFeedSettings::OrderBook);
 
         let stream = create_market_feed(MarketFeedInput {
             ticker: self.ticker.clone(),
@@ -157,11 +166,12 @@ impl PriceFeed {
         mut trades_stream: impl Stream<Item = Trade> + Send + Sync + Unpin + 'f,
         mut sink: impl Sink<TradesAggregate> + Send + Sync + Unpin + 'f,
     ) -> BoxFuture<'f, ()> {
+        let tolerance = self.aggregate_tolerance;
         async move {
             let mut snapshot = trades_history;
             while let Some(trade) = trades_stream.next().await {
                 snapshot.add(trade);
-                let agg:TradesAggregate = snapshot.calculate_aggregate();
+                let agg: TradesAggregate = snapshot.calculate_aggregate(tolerance);
                 if sink.send(agg.clone()).await.is_err() {
                     error!("Sink must be ok");
                     panic!();

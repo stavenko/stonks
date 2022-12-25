@@ -1,7 +1,7 @@
-use std::{borrow::Cow, time::Duration};
+use std::time::Duration;
 
-use crate::serde_utils::{deser_duration_from_integer, deser_float_from_string};
-use serde::{de, Deserialize, Deserializer, Serialize};
+use toolset::{deser_duration_from_integer, deser_float_from_string};
+use serde::{Deserialize, Serialize};
 use sources_common::time_unit::{ser_time_unit, TimeUnit};
 
 use crate::ToChannel;
@@ -51,13 +51,14 @@ pub struct Candle {
     pub close_ts: Duration,
     #[serde(deserialize_with = "deser_float_from_string")]
     pub quote_volume: f64,
-    number_of_trades: u32,
+    pub number_of_trades: u32,
     #[serde(deserialize_with = "deser_float_from_string")]
-    taker_buy_base_asset_volume: f64,
+    pub taker_buy_base_asset_volume: f64,
     #[serde(deserialize_with = "deser_float_from_string")]
-    taker_buy_quote_asset_volume: f64,
+    pub taker_buy_quote_asset_volume: f64,
 
-    unused: String,
+    #[serde(rename = "unused")]
+    _unused: String,
 }
 
 #[derive(Deserialize, Debug)]

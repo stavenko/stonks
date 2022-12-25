@@ -15,5 +15,6 @@ sources-common = { version = "0.1.0", path = "../sources-common" }
 thiserror = "1.0.37"
 tokio = "1.22.0"
 tokio-tungstenite = { version = "0.18.0", features = ["native-tls"] }
+toolset = { version = "0.1.0", path = "../../toolset" }
 tracing = "0.1.37"
 url = "2.3.1"

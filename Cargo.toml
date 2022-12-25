@@ -2,10 +2,13 @@
 
 members = [
   "./app",
+  "./toolset",
   "./apps/mistletoe",
   "./apps/klaxo",
   "./stock-data-providers",
   "./data-sources/binance",
+  "./data-sources/kucoin",
+  "./data-sources/bybit",
   "./data-sources/sources-common",
   "./data-sources/market-feed",
   "./data-sources/multi-price-feed",

@@ -14,5 +14,4 @@ pub struct Candle {
     pub quote_volume: f64,
 }
 
-impl Eq for Candle {
-}
+impl Eq for Candle {}

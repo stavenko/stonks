@@ -1,10 +1,12 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use binance::{
-    candle::{CandleStream, WsCandle},
-    historical_trades::{HistoricalTradesChannel, AllHistoricalTradesQuery},
-    orderbook::{self, OrderBookChannel, OrderBookQuery},
     protocol::{StreamData, StreamPackage},
+    spot::{
+        candle::{CandlesQuery, WsCandle, CandleStream},
+        historical_trades::{AllHistoricalTradesQuery, HistoricalTradesChannel},
+        orderbook::{OrderBookQuery, OrderBookChannel},
+    },
     ToChannel,
 };
 use futures::{Stream, StreamExt};
@@ -12,13 +14,15 @@ use sources_common::time_unit::TimeUnit;
 use tracing::{debug, error, info};
 
 use crate::{
-    candle::Candle, candles::Candles, order_book::OrderBook, FetchCandlesInput,
-    FetchOrderbookInput, MarketFeedInput, MarketFeedMessage, MarketFeedSettings, FetchHistoricalTradesInput, trade::{Trade, Trades},
+    candle::Candle,
+    candles::Candles,
+    order_book::OrderBook,
+    trade::{Trade, Trades},
+    FetchCandlesInput, FetchHistoricalTradesInput, FetchOrderbookInput, MarketFeedInput,
+    MarketFeedMessage, MarketFeedSettings,
 };
 
 pub async fn fetch_candles(input: FetchCandlesInput) -> Candles {
-    use binance::candle::CandlesQuery;
-    use binance::fetch_candles;
     let from = SystemTime::now() - input.time_unit.calc_n(50);
     let to = SystemTime::now() + input.time_unit.calc_n(1);
     let from = from.duration_since(UNIX_EPOCH).unwrap().as_secs();
@@ -32,7 +36,7 @@ pub async fn fetch_candles(input: FetchCandlesInput) -> Candles {
             .unwrap()
             .as_secs()
     );
-    let bin_candles = fetch_candles(
+    let bin_candles = binance::spot::fetch_candles(
         input.api_host,
         CandlesQuery {
             symbol: input.ticker,
@@ -55,7 +59,7 @@ pub async fn fetch_candles(input: FetchCandlesInput) -> Candles {
 }
 
 pub async fn fetch_orderbook(input: FetchOrderbookInput) -> OrderBook {
-    let orderbook = binance::fetch_orderbook(
+    let orderbook = binance::spot::fetch_orderbook(
         input.api_host,
         OrderBookQuery {
             limit: input.depth,
@@ -68,16 +72,15 @@ pub async fn fetch_orderbook(input: FetchOrderbookInput) -> OrderBook {
 }
 
 pub async fn fetch_historical_trades(input: FetchHistoricalTradesInput) -> Trades {
-    let trades = binance::fetch_all_historical_trades(
+    let trades = binance::spot::fetch_all_historical_trades(
         input.api_host,
-        AllHistoricalTradesQuery{
+        AllHistoricalTradesQuery {
             api_key: input.api_key,
-            query: binance::historical_trades::AllQuery { 
-                ticker: input.ticker, 
+            query: binance::spot::historical_trades::AllQuery {
+                ticker: input.ticker,
                 from_date: input.from,
-            }
-        }
-
+            },
+        },
     )
     .await;
 
@@ -88,11 +91,7 @@ pub async fn create_market_feed(
     input: MarketFeedInput,
 ) -> Option<impl Stream<Item = MarketFeedMessage> + Send + Sync> {
     let channels = input.get_channels();
-    let stream = binance::get_market_stream(
-        input.ws_url,
-        channels,
-    )
-    .await;
+    let stream = binance::spot::get_market_stream(input.ws_url, channels).await;
 
     Some(stream.filter_map(|item| async move {
         match item
@@ -108,26 +107,26 @@ pub async fn create_market_feed(
     }))
 }
 
-impl From<binance::historical_trades::ApiHistoricalTrade> for Trade {
-    fn from(item: binance::historical_trades::ApiHistoricalTrade) -> Self {
+impl From<binance::spot::historical_trades::ApiHistoricalTrade> for Trade {
+    fn from(item: binance::spot::historical_trades::ApiHistoricalTrade) -> Self {
         Self {
             price: item.price,
             quantity: item.qty,
             quote_quantity: item.quote_qty,
-            time: item.time
+            time: item.time,
         }
     }
 }
-impl From<binance::orderbook::WsOrderBook> for OrderBook {
-    fn from(ob: binance::orderbook::WsOrderBook) -> Self {
+impl From<binance::spot::orderbook::WsOrderBook> for OrderBook {
+    fn from(ob: binance::spot::orderbook::WsOrderBook) -> Self {
         Self {
             asks: ob.asks.into_iter().map(Into::into).collect(),
             bids: ob.bids.into_iter().map(Into::into).collect(),
         }
     }
 }
-impl From<binance::orderbook::ApiOrderBook> for OrderBook {
-    fn from(ob: binance::orderbook::ApiOrderBook) -> Self {
+impl From<binance::spot::orderbook::ApiOrderBook> for OrderBook {
+    fn from(ob: binance::spot::orderbook::ApiOrderBook) -> Self {
         Self {
             asks: ob.asks.into_iter().map(Into::into).collect(),
             bids: ob.bids.into_iter().map(Into::into).collect(),
@@ -160,7 +159,7 @@ impl From<StreamPackage> for MarketFeedMessage {
         match package.event.event_type.as_ref() {
             "kline" => {
                 let value = package.event.data();
-                match serde_json::from_value::<binance::candle::WsCandle>(value.clone()) {
+                match serde_json::from_value::<binance::spot::candle::WsCandle>(value.clone()) {
                     Ok(candle) => MarketFeedMessage::Candle(candle.into()),
                     Err(e) => {
                         error!("Parse error {:?} <{e}>", value);
@@ -169,7 +168,7 @@ impl From<StreamPackage> for MarketFeedMessage {
                 }
             }
             "depthUpdate" => {
-                let ob: orderbook::WsOrderBook =
+                let ob: binance::spot::orderbook::WsOrderBook =
                     serde_json::from_value(package.event.data()).unwrap();
                 MarketFeedMessage::OrderBook(ob.into())
             }
@@ -178,8 +177,8 @@ impl From<StreamPackage> for MarketFeedMessage {
     }
 }
 
-impl From<(binance::candle::Candle, TimeUnit)> for Candle {
-    fn from((c, tu): (binance::candle::Candle, TimeUnit)) -> Self {
+impl From<(binance::spot::candle::Candle, TimeUnit)> for Candle {
+    fn from((c, tu): (binance::spot::candle::Candle, TimeUnit)) -> Self {
         Self {
             time_unit: tu,
             open: c.open,
@@ -193,8 +192,8 @@ impl From<(binance::candle::Candle, TimeUnit)> for Candle {
     }
 }
 
-impl From<Vec<(binance::candle::Candle, TimeUnit)>> for Candles {
-    fn from(cs: Vec<(binance::candle::Candle, TimeUnit)>) -> Self {
+impl From<Vec<(binance::spot::candle::Candle, TimeUnit)>> for Candles {
+    fn from(cs: Vec<(binance::spot::candle::Candle, TimeUnit)>) -> Self {
         Candles::new(cs.into_iter().map(Into::into).collect())
     }
 }

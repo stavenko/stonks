@@ -33,7 +33,6 @@ impl Deref for PriceNode {
 impl From<PriceNode> for [f64; 2] {
     fn from(pn: PriceNode) -> Self {
         pn.0
-        
     }
 }
 
@@ -49,7 +48,7 @@ pub struct WsOrderBook {
     pub asks: Vec<PriceNode>,
 }
 #[derive(Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ApiOrderBook {
     pub last_update_id: u64,
     pub bids: Vec<PriceNode>,
