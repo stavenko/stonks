@@ -8,7 +8,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     select,
 };
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::TelegramReporter;
 
@@ -30,9 +30,12 @@ impl TelegramReporter {
     {
         async move {
             let storage_path = self.storage_path.clone().into();
-            let Ok(mut chats) = Self::load_chats(&storage_path).await else {
-                error!(?storage_path, "Cannot load file");
-                panic!();
+            let mut chats = match Self::load_chats(&storage_path).await {
+                Ok(chats) => chats,
+                Err(err) => {
+                    warn!(?storage_path, "Cannot load file - will create new one");
+                    Vec::new()
+                }
             };
             info!(?chats, "Loaded chats");
             let api = self.api.clone();
