@@ -16,7 +16,7 @@ fn join_arr(state: &mut Vec<[f64; 2]>, update: &[[f64; 2]]) {
             pos[1] = a[1];
         } else {
             state.push(*a);
-            state.sort_by(|a, b| a[0].partial_cmp(&b[0]).expect("wrong float in order book") );
+            state.sort_by(|a, b| a[0].partial_cmp(&b[0]).expect("wrong float in order book"));
         }
     }
 }

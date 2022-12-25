@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 app = { version = "0.1.0", path = "../../app" }
 clap = { version = "4.0.29", features = ["derive"] }
-multi-price-feed = { version = "0.1.0", path = "../../data-sources/multi-price-feed" }
+multi-price-feed = { version = "0.1.0", path = "../../data-sources/multi-price-feed", no-default-features=true, features=["bybit"] }
 serde_yaml = "0.9.15"
 tokio = { version = "1.23.0", features = ["tokio-macros", "macros"] }
 url = "2.3.1"

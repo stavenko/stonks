@@ -14,9 +14,9 @@ mod worker;
 #[derive(Deserialize)]
 struct Config {
     threshold: f64,
-    #[serde(with="humantime_serde")]
+    #[serde(with = "humantime_serde")]
     period: Duration,
-    tg: TelegramReporterConfig
+    tg: TelegramReporterConfig,
 }
 
 #[derive(Default, Debug, PartialEq, Clone, Eq)]

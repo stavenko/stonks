@@ -25,6 +25,7 @@ pub async fn fetch_ticker_price(api_host: Url) -> Vec<SymbolPrice> {
         }
     }
 }
+
 pub async fn fetch_exchange_info(
     api_host: Url,
     exchange_info: ExchangeInfoRequest,

@@ -1,11 +1,12 @@
-use serde::{Serialize, de::DeserializeOwned};
-use telegram_bot_raw::{GetUpdates, ResponseType, ResponseWrapper, SendMessage, MessageOrChannelPost};
+use serde::{de::DeserializeOwned, Serialize};
+use telegram_bot_raw::{
+    GetUpdates, MessageOrChannelPost, ResponseType, ResponseWrapper, SendMessage,
+};
+use tracing::error;
 use update::Update;
 use url::Url;
-use tracing::error;
 
 pub mod update;
-
 
 #[derive(Clone)]
 pub struct Api {
@@ -13,8 +14,8 @@ pub struct Api {
 }
 
 impl Api {
-    pub fn new(token: String)->Self {
-        Self {token}
+    pub fn new(token: String) -> Self {
+        Self { token }
     }
 
     fn url(&self, method: &str) -> Url {
@@ -24,9 +25,9 @@ impl Api {
     }
 
     async fn request<I, O>(&self, method: &str, input: I) -> O
-        where 
-            I: Serialize,
-            O: DeserializeOwned + Default
+    where
+        I: Serialize,
+        O: DeserializeOwned + Default,
     {
         let mut url = self.url(method);
         let query = serde_qs::to_string(&input).unwrap();
@@ -36,14 +37,17 @@ impl Api {
         let response: ResponseWrapper<O> = serde_json::from_str(&content).unwrap();
         match response {
             ResponseWrapper::Success { result } => result,
-            ResponseWrapper::Error { description, parameters } => {
+            ResponseWrapper::Error {
+                description,
+                parameters,
+            } => {
                 error!(?description, ?parameters, "Error during request");
                 O::default()
             }
         }
     }
 
-    pub async fn send_message<'s>(&self, request: SendMessage<'s> ) -> Option<MessageOrChannelPost> {
+    pub async fn send_message<'s>(&self, request: SendMessage<'s>) -> Option<MessageOrChannelPost> {
         self.request("sendMessage", request).await
     }
 
@@ -51,9 +55,3 @@ impl Api {
         self.request("getUpdates", request).await
     }
 }
- 
-
-
-
-
-

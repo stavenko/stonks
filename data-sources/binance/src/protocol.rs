@@ -27,7 +27,7 @@ pub enum StreamData {
 #[derive(Debug, Deserialize)]
 pub struct StreamPackage {
     pub stream: String,
-    #[serde(rename="data")]
+    #[serde(rename = "data")]
     pub event: Event,
 }
 
@@ -46,14 +46,13 @@ impl Event {
     }
 }
 
-
 #[cfg(test)]
 mod test {
 
-    use crate::orderbook::WsOrderBook;
+
+    use crate::spot::orderbook::WsOrderBook;
 
     use super::StreamData;
-
 
     #[test]
     fn partial_deser() {

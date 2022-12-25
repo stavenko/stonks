@@ -2,7 +2,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum Error {
-
     #[error("Cannot parse message <{1}>: {0}")]
     SerdeError(serde_json::Error, String),
 
@@ -18,4 +17,3 @@ impl From<tokio_tungstenite::tungstenite::Error> for Error {
         Error::TungsteniteError(e)
     }
 }
-

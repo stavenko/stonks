@@ -1,10 +1,12 @@
 use std::fmt;
 use std::time::SystemTime;
 
-use app::{worker::Worker, FutureExt, SinkExt};
+use app::{worker::Worker, FutureExt, SinkExt, mpsc, StreamExt};
 use chrono::Utc;
 use market_feed::{candles::Candles, order_book::OrderBook};
 use serde::Deserialize;
+use tokio::sync::watch;
+use tokio_stream::wrappers::WatchStream;
 use tracing::{error, info};
 
 pub struct Predictor {
@@ -80,7 +82,7 @@ impl Predictor {
         let ticker = self.ticker.clone();
 
         // Use distance from average as indicator
-        // Use normalized volume in last candle - volume in moment as it will be in 
+        // Use normalized volume in last candle - volume in moment as it will be in
 
         if current < min && volume_weight > self.volume_weight_threshold {
             return Some(PredictorSignal::TradeSignal {
@@ -119,18 +121,33 @@ impl Predictor {
     }
 }
 
-impl<'f> Worker<'f, WorkerInput, PredictorSignal> for Predictor {
+impl<'f> Worker<'f, WorkerInput, Option<WorkerInput>, PredictorSignal, app::mpsc::SendError> for Predictor {
+    type InputSink = mpsc::Sender<WorkerInput>;
+    type InputStream = WatchStream<Option<WorkerInput>>;
+
+    fn provide_input_stream(&self) -> (Self::InputSink, Self::InputStream) {
+        let (tx, rx) = watch::channel(None);
+        let (mp_tx, mut mp_rx) = mpsc::channel(1);
+        tokio::spawn(async move {
+            while let Some(item) = mp_rx.next().await {
+                tx.send(Some(item)).ok();
+            }
+        });
+
+        (mp_tx, WatchStream::new(rx))
+    }
+
     fn work(
         self: Box<Self>,
-        mut state_rx: tokio::sync::watch::Receiver<Option<WorkerInput>>,
+        mut state_rx: Self::InputStream,
         mut state_tx: app::mpsc::Sender<PredictorSignal>,
     ) -> app::BoxFuture<'f, ()> {
         async move {
             let mut sent_staff = SystemTime::now();
             loop {
                 let mut signal = None;
-                if state_rx.changed().await.is_ok() {
-                    let borrowed = state_rx.borrow();
+                if let Some(borrowed) = state_rx.next().await {
+                    // let borrowed = state_rx.borrow();
                     if let Some((candles, _)) = borrowed.as_ref() {
                         signal = self.calculate_signal(candles, &mut sent_staff);
                     }

@@ -6,14 +6,15 @@ use market_feed::{candles::Candles, order_book::OrderBook, trade::TradesAggregat
 use predictor::{PredictorSignal, WorkerInput};
 use serde::Deserialize;
 use stock_data_providers::market_feed::{config::PriceFeedConfig, PriceFeed, PriceFeedData};
-use tg_reporter::{TelegramReporterConfig, TelegramReporter};
+use tg_reporter::{TelegramReporter, TelegramReporterConfig};
 use tracing::info;
 
 use crate::predictor::{Predictor, PredictorConfig};
 
+mod histogram;
 mod predictor;
 
-#[derive(Debug, Clone, Default, Eq, PartialEq,)]
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
 struct Mistletoe {
     candles: Candles,
     orderbook: OrderBook,
@@ -36,7 +37,6 @@ struct Opts {
 
 impl InjectedTo<Mistletoe> for PriceFeedData {
     fn inject_to(self, mut state: Mistletoe) -> Mistletoe {
-
         if let Some(c) = self.candles {
             state.candles = c;
         }

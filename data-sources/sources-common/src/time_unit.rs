@@ -1,10 +1,9 @@
-use std::{str::FromStr, borrow::Cow, time::Duration};
+use std::{borrow::Cow, str::FromStr, time::Duration};
 
-use serde::{Deserialize, Serializer, Deserializer, de};
+use serde::{de, Deserialize, Deserializer, Serializer};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct TimeUnit(#[serde(deserialize_with = "deser_time_unit_u32_from_string")] u32);
-
 
 pub static SECOND: u32 = 1;
 pub static MINUTE: u32 = 60 * SECOND;
@@ -17,10 +16,9 @@ impl TimeUnit {
         TimeUnit(v)
     }
 
-    pub fn calc_n(&self, v:u32) -> Duration {
+    pub fn calc_n(&self, v: u32) -> Duration {
         let secs = (self.0 as u64) * (v as u64);
         Duration::from_secs(secs)
-
     }
 
     pub fn mins(v: u32) -> Self {
@@ -92,7 +90,10 @@ impl FromStr for TimeUnit {
     }
 }
 
-pub fn ser_time_unit<S: Serializer>(time_unit: &TimeUnit, serializer: S) -> Result<S::Ok, S::Error> {
+pub fn ser_time_unit<S: Serializer>(
+    time_unit: &TimeUnit,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
     let value = time_unit.fmt();
     serializer.serialize_str(&value)
 }

@@ -27,6 +27,19 @@ pub struct Signal {
     prev_price: f64,
 }
 
+impl Signal {
+    fn get_ticker_url(&self) -> String{
+        match self.price.symbol.source.as_str() {
+            "binance" => format!("https://www.binance.com/en/futures/{}", self.price.symbol.ticker),
+            "bybit" => format!("https://www.bybit.com/trade/usdt/{}/", self.price.symbol.ticker),
+            "kucoin" => format!("https://www.kucoin.com/futures/trade/{}", self.price.symbol.ticker),
+            _ => unimplemented!()
+            
+        }
+    }
+}
+
+
 impl Display for Signal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -56,6 +69,8 @@ impl<'f> ProducerWorker<'f, Signal> for PriceCollector {
             let mut input = GetMultiPriceFeedInput::new(self.period);
             input.add_filter(|sym| sym.quote_asset.to_uppercase() == "USDT");
             input.add_url("binance", "https://fapi.binance.com");
+            input.add_url("kucoin",  "https://api-futures.kucoin.com");
+            input.add_url("bybit",  "https://api.bybit.com");
             let mut price_feed = multi_price_feed::get_multi_price_feed(input).await;
 
             while let Some(item) = price_feed.next().await {

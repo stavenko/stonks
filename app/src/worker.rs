@@ -3,12 +3,12 @@ use core::fmt;
 use futures::{channel::mpsc, future::BoxFuture, Sink, Stream};
 use tokio::sync::watch;
 
-pub trait Worker<'f, Input, Produced, E>
+pub trait Worker<'f, Consumed, II, Produced, E>
 where
     E: fmt::Debug,
 {
-    type InputStream: Stream<Item = Input> + Send + Sync + Unpin;
-    type InputSink: Sink<Input, Error = E> + Send + Sync + Unpin;
+    type InputStream: Stream<Item = II> + Send + Sync + Unpin;
+    type InputSink: Sink<Consumed, Error = E> + Send + Sync + Unpin;
 
     fn provide_input_stream(&self) -> (Self::InputSink, Self::InputStream);
 

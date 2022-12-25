@@ -1,4 +1,4 @@
-use app::{mpsc, worker::ProducerWorker, BoxFuture, FutureExt, StreamExt, SinkExt};
+use app::{mpsc, worker::ProducerWorker, BoxFuture, FutureExt, SinkExt, StreamExt};
 use futures::select;
 use market_feed::{candles::Candles, order_book::OrderBook, trade::TradesAggregate};
 use tracing::info;
@@ -8,7 +8,6 @@ use self::config::{CandleSettings, OrderbookSettings, TradesSettings};
 
 pub mod config;
 mod implementation;
-
 
 #[derive(Default, Debug, Clone)]
 pub struct PriceFeedData {
@@ -26,13 +25,11 @@ pub struct PriceFeed {
     candles: Option<CandleSettings>,
     orderbook: Option<OrderbookSettings>,
     trades: Option<TradesSettings>,
+    aggregate_tolerance: f64
 }
 
 impl<'f> ProducerWorker<'f, PriceFeedData> for PriceFeed {
-    fn work(
-        self: Box<Self>,
-        mut state_tx: app::mpsc::Sender<PriceFeedData>,
-    ) -> BoxFuture<'f, ()> {
+    fn work(self: Box<Self>, mut state_tx: app::mpsc::Sender<PriceFeedData>) -> BoxFuture<'f, ()> {
         async move {
             let mut accumulated = PriceFeedData::default();
             let (candles_tx, mut candles_rx) = mpsc::unbounded();
@@ -67,7 +64,7 @@ impl<'f> ProducerWorker<'f, PriceFeedData> for PriceFeed {
                                 accumulated = PriceFeedData{ trades_aggregate: Some(trades_aggregate), ..accumulated};
                                 state_tx.send(accumulated.clone()).await.expect("Channel expected to be good");
                                 } else {
-                                    info!("OrderBook stream finished - exit data feed");
+                                    info!("Trades stream finished - exit data feed");
                                 }
                             }
                         }

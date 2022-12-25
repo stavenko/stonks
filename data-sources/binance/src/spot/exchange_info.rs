@@ -1,10 +1,10 @@
 use std::time::Duration;
 
+use toolset::deser_duration_from_integer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::serde_utils::deser_duration_from_integer;
 
-#[derive(Debug, Default, Serialize,)]
+#[derive(Debug, Default, Serialize)]
 pub struct ExchangeInfoRequest {
     pub symbol: Option<String>,
     pub symbols: Option<Vec<String>>,
@@ -12,7 +12,7 @@ pub struct ExchangeInfoRequest {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ExchangeInfo {
     pub timezone: String,
     #[serde(deserialize_with = "deser_duration_from_integer")]
@@ -21,20 +21,19 @@ pub struct ExchangeInfo {
 }
 
 #[derive(Deserialize, Debug)]
-#[serde(rename_all="SCREAMING_SNAKE_CASE")]
-pub enum OrderType{
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum OrderType {
     Limit,
     LimitMaker,
     Market,
     StopLoss,
     StopLossLimit,
     TakeProfit,
-    TakeProfitLimit
+    TakeProfitLimit,
 }
 
-
 #[derive(Debug, Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Symbol {
     pub symbol: String,
     pub status: String,

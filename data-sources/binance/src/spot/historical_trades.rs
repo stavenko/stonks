@@ -1,7 +1,8 @@
-use std::time::{Duration};
-use crate::{serde_utils::deser_duration_from_integer, ToChannel};
+use crate::ToChannel;
+use std::time::Duration;
+use toolset::deser_duration_from_integer;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
 pub struct HistoricalTradesQuery {
@@ -15,7 +16,7 @@ pub struct AllHistoricalTradesQuery {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Query {
     pub ticker: String,
     pub from_id: Option<u64>,
@@ -24,11 +25,11 @@ pub struct Query {
 #[derive(Debug)]
 pub struct AllQuery {
     pub ticker: String,
-    pub from_date: Duration
+    pub from_date: Duration,
 }
 
 pub struct HistoricalTradesChannel {
-    pub ticker: String
+    pub ticker: String,
 }
 
 impl ToChannel for HistoricalTradesChannel {
@@ -38,7 +39,7 @@ impl ToChannel for HistoricalTradesChannel {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct ApiHistoricalTrade {
     pub id: u64,
     pub price: f64,
@@ -48,5 +49,4 @@ pub struct ApiHistoricalTrade {
     pub time: Duration, // Trade executed timestamp, as same as `T` in the stream
     pub is_buyer_maker: bool,
     pub is_best_match: bool,
-
 }

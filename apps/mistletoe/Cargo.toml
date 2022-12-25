@@ -16,5 +16,6 @@ serde_yaml = "0.9.14"
 stock-data-providers = { version = "0.1.0", path = "../../stock-data-providers" }
 tg-reporter = { version = "0.1.0", path = "../../connectivity/tg-reporter" }
 tokio = { version = "1.22.0", features = ["macros", "rt-multi-thread"] }
+tokio-stream = { version = "0.1.11", features = ["sync"] }
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
