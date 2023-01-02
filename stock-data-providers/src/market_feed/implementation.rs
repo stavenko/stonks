@@ -4,7 +4,7 @@ use market_feed::{
     candles::Candles,
     create_market_feed, fetch_candles, fetch_historical_trades, fetch_orderbook,
     order_book::OrderBook,
-    trade::{Trade, Trades, TradesAggregate},
+    trade::{Trade, Trades, TradesAggregate, AggregateOptions},
     FetchCandlesInput, FetchHistoricalTradesInput, FetchOrderbookInput, MarketFeedInput,
     MarketFeedMessage, MarketFeedSettings,
 };
@@ -22,8 +22,9 @@ impl PriceFeed {
             api_host,
             ws_host,
             ticker,
-            aggregate_tolerance,
+            aggregate_options,
         } = config;
+
 
         Self {
             api_key,
@@ -33,7 +34,7 @@ impl PriceFeed {
             ticker,
             orderbook,
             trades,
-            aggregate_tolerance,
+            aggregate_options,
         }
     }
 
@@ -69,6 +70,7 @@ impl PriceFeed {
         if let Some(stream) = stream {
             let (mut candle_tx, candle_rx) = mpsc::unbounded();
             let (mut orderbook_tx, orderbook_rx) = mpsc::unbounded();
+            let (mut trades_tx, trades_rx) = mpsc::unbounded();
             let mut futures = Vec::new();
 
             futures.push(
@@ -82,6 +84,9 @@ impl PriceFeed {
                             MarketFeedMessage::OrderBook(o) => {
                                 orderbook_tx.send(o).await.unwrap();
                             }
+                            MarketFeedMessage::Trade(t) => {
+                                trades_tx.send(t).await.unwrap();
+                            }
                         }
                     }
                 }
@@ -89,12 +94,14 @@ impl PriceFeed {
             );
 
             futures.push(self.run_candles_future(candle_rx, candles_sink).boxed());
+            futures.push(self.run_trades_future(trades_rx, trades_aggregate_sink).boxed());
             futures.push(
                 self.run_orderbook_future(orderbook_rx, orderbook_sink)
                     .boxed(),
             );
 
             futures::future::join_all(futures).await;
+            info!("exit");
         } else {
             panic!("Failed to init market stream");
         }
@@ -166,12 +173,15 @@ impl PriceFeed {
         mut trades_stream: impl Stream<Item = Trade> + Send + Sync + Unpin + 'f,
         mut sink: impl Sink<TradesAggregate> + Send + Sync + Unpin + 'f,
     ) -> BoxFuture<'f, ()> {
-        let tolerance = self.aggregate_tolerance;
+        let options = self.aggregate_options.clone();
+        let window = self.trades.as_ref().unwrap().window;
         async move {
+            let options = AggregateOptions::new(options.speed_factor_window, options.tolerance, 0.0);
             let mut snapshot = trades_history;
             while let Some(trade) = trades_stream.next().await {
                 snapshot.add(trade);
-                let agg: TradesAggregate = snapshot.calculate_aggregate(tolerance);
+                snapshot.remove_old(window);
+                let agg: TradesAggregate = snapshot.calculate_aggregate(&options);
                 if sink.send(agg.clone()).await.is_err() {
                     error!("Sink must be ok");
                     panic!();
@@ -186,9 +196,11 @@ impl PriceFeed {
         trades_stream: impl Stream<Item = Trade> + Send + Sync + Unpin + 'f,
         sink: impl Sink<TradesAggregate> + Send + Sync + Unpin + 'f,
     ) {
+
         if let Some(trades) = self.trades.as_ref() {
+            info!(?trades, "fetch trades");
             let result = fetch_historical_trades(FetchHistoricalTradesInput {
-                from: trades.from,
+                from: trades.window,
                 api_key: self.api_key.clone(),
                 ticker: self.ticker.clone(),
                 api_host: self.api_host.clone(),

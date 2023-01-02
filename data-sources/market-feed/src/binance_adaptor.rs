@@ -3,14 +3,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use binance::{
     protocol::{StreamData, StreamPackage},
     spot::{
-        candle::{CandlesQuery, WsCandle, CandleStream},
+        candle::{CandleStream, CandlesQuery, WsCandle},
         historical_trades::{AllHistoricalTradesQuery, HistoricalTradesChannel},
-        orderbook::{OrderBookQuery, OrderBookChannel},
+        orderbook::{OrderBookChannel, OrderBookQuery}, trade::WsTrade,
     },
     ToChannel,
 };
 use futures::{Stream, StreamExt};
-use sources_common::time_unit::TimeUnit;
+use sources_common::{time_unit::TimeUnit, symbol::{Symbol, self}};
 use tracing::{debug, error, info};
 
 use crate::{
@@ -19,7 +19,7 @@ use crate::{
     order_book::OrderBook,
     trade::{Trade, Trades},
     FetchCandlesInput, FetchHistoricalTradesInput, FetchOrderbookInput, MarketFeedInput,
-    MarketFeedMessage, MarketFeedSettings,
+    MarketFeedMessage, MarketFeedSettings, FetchSymbolInput,
 };
 
 pub async fn fetch_candles(input: FetchCandlesInput) -> Candles {
@@ -71,6 +71,24 @@ pub async fn fetch_orderbook(input: FetchOrderbookInput) -> OrderBook {
     orderbook.into()
 }
 
+/*
+pub async fn fetch_symbol(input: FetchSymbolInput) -> Symbol {
+    let symbol = binance::spot::fetch_exchange_info(
+        input.api_host,
+        binance::spot::exchange_info::ExchangeInfoRequest {
+            symbol: Some(input.ticker), 
+            symbols: None,
+            permissions: None
+        }
+    )
+    .await;
+
+    let symbol = symbol.symbols.get(0).
+
+    symbol.into()
+}
+*/
+
 pub async fn fetch_historical_trades(input: FetchHistoricalTradesInput) -> Trades {
     let trades = binance::spot::fetch_all_historical_trades(
         input.api_host,
@@ -78,7 +96,7 @@ pub async fn fetch_historical_trades(input: FetchHistoricalTradesInput) -> Trade
             api_key: input.api_key,
             query: binance::spot::historical_trades::AllQuery {
                 ticker: input.ticker,
-                from_date: input.from,
+                window: input.from,
             },
         },
     )
@@ -94,10 +112,7 @@ pub async fn create_market_feed(
     let stream = binance::spot::get_market_stream(input.ws_url, channels).await;
 
     Some(stream.filter_map(|item| async move {
-        match item
-            .map_err(|e| format!("Binance error: {e}"))
-            .and_then(TryInto::try_into)
-        {
+        match item.try_into() {
             Ok(item) => Some(item),
             Err(e) => {
                 info!("non-data message {}", e);
@@ -150,6 +165,17 @@ impl From<WsCandle> for Candle {
     }
 }
 
+impl From<WsTrade> for Trade {
+    fn from(trade: WsTrade) -> Self {
+        Self {
+            price: trade.price,
+            quantity: trade.qty,
+            time: trade.time,
+            quote_quantity: trade.quote_qty(),
+        }
+    }
+}
+
 impl From<StreamPackage> for MarketFeedMessage {
     fn from(package: StreamPackage) -> Self {
         debug!(
@@ -157,6 +183,17 @@ impl From<StreamPackage> for MarketFeedMessage {
             "Transforming stream package to market feed message"
         );
         match package.event.event_type.as_ref() {
+            "trade" => {
+                let value = package.event.data();
+                match serde_json::from_value::<binance::spot::trade::WsTrade>(value.clone()) {
+                    Ok(trade) => MarketFeedMessage::Trade(trade.into()),
+                    Err(e) => {
+                        error!("Parse error {:?} <{e}>", value);
+                        panic!();
+                    }
+                }
+
+            }
             "kline" => {
                 let value = package.event.data();
                 match serde_json::from_value::<binance::spot::candle::WsCandle>(value.clone()) {

@@ -14,7 +14,7 @@ pub struct SubscribeMessage {
     pub id: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum StreamData {
     SubscribeResponse {

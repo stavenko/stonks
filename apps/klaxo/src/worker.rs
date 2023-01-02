@@ -39,7 +39,7 @@ impl Signal {
                 self.price.symbol.ticker
             ),
             "bybit" => format!(
-                "https://www.bybit.com/trade/usdt/{}/",
+                "https://www.bybit.com/trade/usdt/{}",
                 self.price.symbol.ticker
             ),
             "kucoin" => format!(

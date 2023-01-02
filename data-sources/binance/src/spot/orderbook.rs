@@ -47,6 +47,7 @@ pub struct WsOrderBook {
     #[serde(rename = "a")]
     pub asks: Vec<PriceNode>,
 }
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiOrderBook {

@@ -59,7 +59,7 @@ impl InjectedTo<Mistletoe> for PredictorSignal {
 
 impl Reduced<WorkerInput> for Mistletoe {
     fn reduce(&mut self) -> WorkerInput {
-        (self.candles.clone(), self.orderbook.clone())
+        (self.orderbook.clone(), self.trades_aggregate.clone())
     }
 }
 

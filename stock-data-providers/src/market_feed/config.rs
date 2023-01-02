@@ -4,6 +4,8 @@ use serde::{de, Deserialize, Deserializer};
 use sources_common::time_unit::{TimeUnit, DAY};
 use url::Url;
 
+use super::AggregateOptions;
+
 #[derive(Deserialize, Debug)]
 pub struct CandleSettings {
     pub(super) time_unit: TimeUnit,
@@ -20,7 +22,7 @@ pub struct OrderbookSettings {
 #[derive(Deserialize, Debug)]
 pub struct TradesSettings {
     #[serde(default = "default_trades_duration", with = "humantime_serde")]
-    pub(super) from: Duration,
+    pub(super) window: Duration,
 }
 
 #[derive(Deserialize)]
@@ -37,7 +39,7 @@ pub struct PriceFeedConfig {
     pub(super) candles: Option<CandleSettings>,
     pub(super) orderbook: Option<OrderbookSettings>,
     pub(super) trades: Option<TradesSettings>,
-    pub(super) aggregate_tolerance: f64,
+    pub(super) aggregate_options: AggregateOptions,
 }
 
 fn api_key_from_env() -> String {

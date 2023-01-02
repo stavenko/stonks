@@ -4,6 +4,15 @@ price_feed:
   api_host: https://api.binance.com
   ws_host: wss://stream.binance.com:443
   time_unit: 1m
+  aggregate_options:
+    tolerance: 0.025
+    tick_size: 0.0001
+    speed_factor_window: 1m
+
+
+  trades:
+    window: 2h
+
 predictor:
   ticker: ETHUSDT
   volume_weight_threshold: 0.5

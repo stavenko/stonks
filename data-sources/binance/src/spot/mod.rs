@@ -1,14 +1,15 @@
 use core::fmt;
 use futures::{channel::mpsc, SinkExt, Stream, StreamExt};
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{de::DeserializeOwned, Serialize};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio_tungstenite::{connect_async, tungstenite::Message};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 use url::Url;
 
 use crate::{
     error::Error,
-    protocol::{Response, StreamData, SubscribeMessage},
+    protocol::{Response, StreamData, StreamPackage, SubscribeMessage},
     ToChannel,
 };
 
@@ -25,6 +26,7 @@ pub mod candle;
 pub mod exchange_info;
 pub mod historical_trades;
 pub mod orderbook;
+pub mod trade;
 
 fn conversion(text: String) -> Result<StreamData, Error> {
     let stream_data = serde_json::from_str::<StreamData>(&text)
@@ -36,7 +38,7 @@ fn conversion(text: String) -> Result<StreamData, Error> {
 pub async fn get_market_stream(
     mut ws_host: Url,
     subscribe_streams: Vec<Box<dyn ToChannel + Send>>,
-) -> impl Stream<Item = Result<StreamData, Error>> {
+) -> impl Stream<Item = StreamPackage> {
     ws_host.set_path("/stream");
 
     let (stream, _response) = connect_async(ws_host).await.unwrap();
@@ -62,9 +64,15 @@ pub async fn get_market_stream(
         while let Some(Ok(msg)) = ws_rx.next().await {
             match msg {
                 Message::Ping(v) => ws_tx.send(Message::Pong(v)).await.unwrap(),
-                Message::Text(txt) => {
-                    tx.send(txt).await.unwrap();
-                }
+                Message::Text(txt) => match conversion(txt) {
+                    Ok(StreamData::Package(p)) => tx.send(p).await.unwrap(),
+                    Ok(StreamData::SubscribeResponse { response, id }) => {
+                        info!(?response, ?id, "SubscribeResponse");
+                    }
+                    Err(e) => {
+                        error!(?e, "Error occured");
+                    }
+                },
                 Message::Close(_) => {
                     tx.close().await.unwrap();
                     ws_tx.close().await.unwrap();
@@ -75,10 +83,10 @@ pub async fn get_market_stream(
         }
     });
 
-    rx.map(conversion)
+    rx
 }
 
-pub async fn fetch<Q, R>(api_host: Url, path: &str, query: Q) -> R
+pub async fn fetch<Q, R>(api_host: Url, path: &str, query: Q, headers: Option<HeaderMap>) -> R
 where
     Q: Serialize + fmt::Debug,
     R: DeserializeOwned,
@@ -89,14 +97,12 @@ where
     info!(?query, ?qs, "Run query");
 
     url.set_query(Some(&qs));
-    let result = reqwest::Client::new()
-        .get(url)
-        .send()
-        .await
-        .unwrap()
-        .text()
-        .await
-        .unwrap();
+    let mut req = reqwest::Client::new().get(url);
+    if let Some(headers) = headers {
+        req = req.headers(headers);
+    }
+
+    let result = req.send().await.unwrap().text().await.unwrap();
 
     match serde_json::from_str::<Response<R>>(&result) {
         Ok(Response::Success(t)) => t,
@@ -105,7 +111,32 @@ where
         }
 
         Err(e) => {
-            panic!("Serde! {e}");
+            panic!("Serde! {e} {}", result);
+        }
+    }
+}
+pub async fn fetch_type<Q, R>(api_host: Url, path: &str, query: Q, headers: Option<HeaderMap>) -> R
+where
+    Q: Serialize + fmt::Debug,
+    R: DeserializeOwned,
+{
+    let mut url = api_host.join(path).unwrap();
+    let qs = serde_qs::to_string(&query).unwrap();
+
+    info!(?query, ?qs, "Run query");
+
+    url.set_query(Some(&qs));
+    let mut req = reqwest::Client::new().get(url);
+    if let Some(headers) = headers {
+        req = req.headers(headers);
+    }
+
+    let result = req.send().await.unwrap().text().await.unwrap();
+
+    match serde_json::from_str::<R>(&result) {
+        Ok(t) => t,
+        Err(e) => {
+            panic!("Serde! {e} {}", result);
         }
     }
 }
@@ -134,21 +165,24 @@ pub async fn fetch_exchange_info(
 }
 
 pub async fn fetch_candles(api_host: Url, candles_query: CandlesQuery) -> Vec<Candle> {
-    fetch(api_host, "/api/v3/klines", candles_query).await
+    fetch(api_host, "/api/v3/klines", candles_query, None).await
 }
 
 pub async fn fetch_orderbook(api_host: Url, orderbook_query: OrderBookQuery) -> ApiOrderBook {
-    fetch(api_host, "/api/v3/depth", orderbook_query).await
+    fetch(api_host, "/api/v3/depth", orderbook_query, None).await
 }
 
 pub async fn fetch_historical_trades(
     api_host: Url,
     historical_trades_query: HistoricalTradesQuery,
 ) -> Vec<ApiHistoricalTrade> {
-    fetch(
+    let mut headers = HeaderMap::new();
+    headers.insert("X-MBX-APIKEY", HeaderValue::from_str(&historical_trades_query.api_key).unwrap());
+    fetch_type(
         api_host,
         "/api/v3/historicalTrades",
         historical_trades_query.query,
+        Some(headers)
     )
     .await
 }
@@ -158,31 +192,32 @@ pub async fn fetch_all_historical_trades(
     all_historical_trades_query: AllHistoricalTradesQuery,
 ) -> Vec<ApiHistoricalTrade> {
     let mut trades: Vec<Vec<ApiHistoricalTrade>> = Vec::new();
+    info!(?all_historical_trades_query, "Do query");
+    let window = all_historical_trades_query.query.window;
+    let now = || SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     loop {
+        tokio::time::sleep(Duration::from_millis(500)).await;
         if let Some(true) = trades
             .last()
             .and_then(|r| r.first())
-            .map(|first_trade| first_trade.time < all_historical_trades_query.query.from_date)
+            .map(|first_trade| (now() - first_trade.time) > window)
         {
             break;
         }
 
-        let last_id = trades.last().and_then(|t| t.first()).map(|t| t.id);
-
-        trades.push(
-            fetch_historical_trades(
-                api_host.clone(),
-                HistoricalTradesQuery {
-                    query: Query {
-                        ticker: all_historical_trades_query.query.ticker.clone(),
-                        from_id: last_id,
-                    },
-                    api_key: all_historical_trades_query.api_key.clone(),
+        let from_id = trades.last().and_then(|t| t.first()).map(|t| t.id - 500);
+        let fetched_trades = fetch_historical_trades(
+            api_host.clone(),
+            HistoricalTradesQuery {
+                query: Query {
+                    symbol: all_historical_trades_query.query.ticker.clone(),
+                    from_id,
                 },
-            )
-            .await,
-        );
-        tokio::time::sleep(Duration::from_secs(1)).await;
+                api_key: all_historical_trades_query.api_key.clone(),
+            },
+        ).await;
+
+        trades.push(fetched_trades);
     }
 
     trades.into_iter().rev().flatten().collect()

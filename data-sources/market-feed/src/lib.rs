@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use candle::Candle;
 use order_book::OrderBook;
+use trade::Trade;
 use sources_common::time_unit::TimeUnit;
 use url::Url;
 
@@ -14,6 +15,7 @@ pub mod trade;
 pub enum MarketFeedMessage {
     Candle(Candle),
     OrderBook(OrderBook),
+    Trade(Trade),
 }
 
 pub enum MarketFeedSettings {
@@ -39,6 +41,11 @@ pub struct FetchOrderbookInput {
     pub api_host: Url,
     pub ticker: String,
     pub depth: u32,
+}
+
+pub struct FetchSymbolInput {
+    pub api_host: Url,
+    pub ticker: String,
 }
 
 pub struct FetchHistoricalTradesInput {

@@ -1,6 +1,10 @@
+use std::time::Duration;
+
 use app::{mpsc, worker::ProducerWorker, BoxFuture, FutureExt, SinkExt, StreamExt};
 use futures::select;
-use market_feed::{candles::Candles, order_book::OrderBook, trade::TradesAggregate};
+use market_feed::{candles::Candles, order_book::OrderBook, trade::{TradesAggregate, }};
+use serde::Deserialize;
+use sources_common::symbol::Symbol;
 use tracing::info;
 use url::Url;
 
@@ -16,6 +20,14 @@ pub struct PriceFeedData {
     pub trades_aggregate: Option<TradesAggregate>,
 }
 
+#[derive(Deserialize, Default, Debug, Clone, PartialEq)]
+pub struct AggregateOptions {
+    tolerance: f64,
+    #[serde(with="humantime_serde")]
+    speed_factor_window: Duration,
+}
+
+
 #[derive(Debug)]
 pub struct PriceFeed {
     api_host: Url,
@@ -25,7 +37,7 @@ pub struct PriceFeed {
     candles: Option<CandleSettings>,
     orderbook: Option<OrderbookSettings>,
     trades: Option<TradesSettings>,
-    aggregate_tolerance: f64
+    aggregate_options: AggregateOptions,
 }
 
 impl<'f> ProducerWorker<'f, PriceFeedData> for PriceFeed {
@@ -48,7 +60,6 @@ impl<'f> ProducerWorker<'f, PriceFeedData> for PriceFeed {
                                     state_tx.send(accumulated.clone()).await.expect("Channel expected to be good");
                                 } else {
                                     info!("Candles stream finished - exit data feed");
-                                    break;
                                 }
                             },
                             maybe_orderbook = orderbook_rx.next() =>{

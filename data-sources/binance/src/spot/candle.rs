@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use toolset::{deser_duration_from_integer, deser_float_from_string};
 use serde::{Deserialize, Serialize};
 use sources_common::time_unit::{ser_time_unit, TimeUnit};
+use toolset::{deser_duration_from_integer, deser_float_from_string};
 
 use crate::ToChannel;
 

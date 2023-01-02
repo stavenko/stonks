@@ -3,7 +3,7 @@ use std::time::SystemTime;
 
 use app::{worker::Worker, FutureExt, SinkExt, mpsc, StreamExt};
 use chrono::Utc;
-use market_feed::{candles::Candles, order_book::OrderBook};
+use market_feed::{candles::Candles, order_book::OrderBook, trade::TradesAggregate};
 use serde::Deserialize;
 use tokio::sync::watch;
 use tokio_stream::wrappers::WatchStream;
@@ -20,7 +20,7 @@ pub struct PredictorConfig {
     pub ticker: String,
 }
 
-pub type WorkerInput = (Candles, OrderBook);
+pub type WorkerInput = (OrderBook, TradesAggregate);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Position {
@@ -72,18 +72,36 @@ impl Predictor {
 
     fn calculate_signal(
         &self,
-        candles: &Candles,
+        trades_aggregate: &TradesAggregate,
         sent_staff: &mut SystemTime,
     ) -> Option<PredictorSignal> {
+        /*
         let min = candles.min_low();
         let max = candles.max_high();
         let current = candles.current();
         let volume_weight = candles.last_volume_weight();
         let ticker = self.ticker.clone();
+        */
+
+
+        // let s = trades_aggregate.support_volume;
+        // let min = trades_aggregate.min_price;
+        // let max = trades_aggregate.max_price;
+        //
+        // If amount of trades increased
+        // If volume of current price become significant
+        // 
+
+        if trades_aggregate.support_volume < 0.25 {
+            
+            info!(?trades_aggregate, "Let me check");
+        }
+        None
 
         // Use distance from average as indicator
         // Use normalized volume in last candle - volume in moment as it will be in
 
+        /*
         if current < min && volume_weight > self.volume_weight_threshold {
             return Some(PredictorSignal::TradeSignal {
                 time: SystemTime::now(),
@@ -118,6 +136,7 @@ impl Predictor {
             }
             None
         }
+        */
     }
 }
 
@@ -148,8 +167,8 @@ impl<'f> Worker<'f, WorkerInput, Option<WorkerInput>, PredictorSignal, app::mpsc
                 let mut signal = None;
                 if let Some(borrowed) = state_rx.next().await {
                     // let borrowed = state_rx.borrow();
-                    if let Some((candles, _)) = borrowed.as_ref() {
-                        signal = self.calculate_signal(candles, &mut sent_staff);
+                    if let Some((_, trades_aggregate)) = borrowed.as_ref() {
+                        signal = self.calculate_signal(trades_aggregate, &mut sent_staff);
                     }
                 }
                 if let Some(signal) = signal.take() {

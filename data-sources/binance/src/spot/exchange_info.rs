@@ -55,3 +55,14 @@ pub struct Symbol {
     #[serde(default)]
     pub allowed_self_trade_prevention_modes: Vec<String>,
 }
+
+impl From<Symbol> for sources_common::symbol::Symbol {
+    fn from(value: Symbol) -> Self {
+        Self {
+            source: "binance".into(),
+            ticker: value.symbol,
+            base_asset: value.base_asset,
+            quote_asset: value.quote_asset,
+        }
+    }
+}
