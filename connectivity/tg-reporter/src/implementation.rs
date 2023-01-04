@@ -2,8 +2,10 @@ use core::fmt;
 use std::{fmt::Debug, path::PathBuf};
 
 use app::{BoxFuture, FutureExt, Sink, SinkExt, Stream, StreamExt};
-use telegram_bot_raw::{ChatId, ChatMemberStatus, ChatRef, GetUpdates, SendMessage, UpdateKind, ParseMode::MarkdownV2};
-use tg_api::Api;
+use telegram_bot_raw::{
+    ChatId, ChatMemberStatus, ChatRef, GetUpdates, ParseMode::MarkdownV2, SendMessage, UpdateKind,
+};
+use tg_api::{Api, update::Update};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     select,
@@ -100,6 +102,45 @@ impl TelegramReporter {
         }
     }
 
+    async fn process_updates<S>(latest_update: &mut Option<i64>, updates: Vec<Update>, tx: &mut S) 
+
+    where
+        S: Sink<ChatMessage> + fmt::Debug + Unpin + Send + Sync,
+        <S as app::Sink<ChatMessage>>::Error: fmt::Debug,
+    {
+        *latest_update = updates.last().map(|upd| upd.id);
+
+        for update in updates {
+            info!(?update, "Got update");
+            if let Some(message) = update.message {
+                info!(?message, "Got message");
+                // Here comes code to store clients
+                tx.send(ChatMessage::Add(message.chat.id().into()))
+                    .await
+                    .unwrap();
+            }
+
+            if let Some(chat_member) = update.my_chat_member {
+                info!(?chat_member, "Got my chat member update");
+                if matches!(chat_member.new_chat_member.status, ChatMemberStatus::Kicked) {
+                    tx.send(ChatMessage::Delete(chat_member.chat.id))
+                        .await
+                        .unwrap();
+                }
+                // Here comes code to remove clients
+            }
+
+            if let Some(chat_member) = update.chat_member {
+                info!(?chat_member, "Got chat member update");
+
+                tx.send(ChatMessage::Delete(chat_member.chat.id))
+                    .await
+                    .unwrap();
+                // Here comes code to remove clients
+            }
+        }
+    }
+
     pub fn bot_loop<'f, S>(&'f self, mut tx: S) -> BoxFuture<'f, ()>
     where
         S: Sink<ChatMessage> + fmt::Debug + Unpin + Send + Sync + 'f,
@@ -116,39 +157,14 @@ impl TelegramReporter {
                         updates.offset(update_id + 1);
                         updates
                     })
-                    .unwrap_or(GetUpdates::new());
-                let updates = api.get_updates(request).await;
-                latest_update = updates.last().map(|upd| upd.id);
-
-                for update in updates {
-                    info!(?update, "Got update");
-                    if let Some(message) = update.message {
-                        info!(?message, "Got message");
-                        // Here comes code to store clients
-                        tx.send(ChatMessage::Add(message.chat.id().into()))
-                            .await
-                            .unwrap();
-                    }
-
-                    if let Some(chat_member) = update.my_chat_member {
-                        info!(?chat_member, "Got my chat member update");
-                        if matches!(chat_member.new_chat_member.status, ChatMemberStatus::Kicked) {
-                            tx.send(ChatMessage::Delete(chat_member.chat.id))
-                                .await
-                                .unwrap();
-                        }
-                        // Here comes code to remove clients
-                    }
-
-                    if let Some(chat_member) = update.chat_member {
-                        info!(?chat_member, "Got chat member update");
-
-                        tx.send(ChatMessage::Delete(chat_member.chat.id))
-                            .await
-                            .unwrap();
-                        // Here comes code to remove clients
+                    .unwrap_or_else(GetUpdates::new);
+                match api.get_updates(request).await {
+                    Ok(updates) => Self::process_updates(&mut latest_update, updates, &mut tx).await,
+                    Err(some_error) => {
+                        error!("{some_error}");
                     }
                 }
+
             }
         }
         .boxed()

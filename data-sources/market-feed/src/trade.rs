@@ -36,6 +36,10 @@ impl Trades {
         self.0.push(trade);
     }
 
+    pub fn find_window(&self) -> Self {
+
+    }
+
     pub fn remove_old(&mut self, window: Duration) {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         let was = self.0.len();
