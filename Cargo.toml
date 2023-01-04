@@ -12,7 +12,6 @@ members = [
   "./data-sources/sources-common",
   "./data-sources/market-feed",
   "./data-sources/multi-price-feed",
-  "./connectivity/tg-bot-test",
   "./connectivity/tg-api",
   "./connectivity/tg-reporter",
 ]
