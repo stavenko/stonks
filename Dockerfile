@@ -29,4 +29,4 @@ ENTRYPOINT ["/usr/local/bin/mistletoe"]
 FROM gold AS klaxo
 WORKDIR app
 COPY --from=builder /app/target/release/klaxo /usr/local/bin
-ENTRYPOINT ["/usr/local/bin/mistletoe"]
+ENTRYPOINT ["/usr/local/bin/klaxo"]
