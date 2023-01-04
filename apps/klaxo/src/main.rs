@@ -44,6 +44,7 @@ impl Reduced<Vec<Signal>> for Klaxo {
 }
 
 async fn runner() {
+    println!("ADASDFAS");
     let cli_opts = Opts::parse();
     tracing_subscriber::fmt::init();
 
